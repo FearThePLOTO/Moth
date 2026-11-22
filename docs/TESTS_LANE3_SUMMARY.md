@@ -98,8 +98,8 @@ Parametrized tests count once per value, so 14 test functions produce 22 tests.
 |---|---|---|---|
 | 1 | `test_state_initialization` | A new `State` | 32 registers, `pc = TEXT_START`, `hi = 0`, `lo = 0`, `memory` is a `Memory` |
 | 2 | `test_stack_pointer_initialization` | `$sp` (register 29) starts at the top of the stack | `read_reg(29) == STACK_START` |
-| 3 | `test_register_zero_always_reads_zero` | Reading register 0 even if `regs[0]` was changed directly | 0 |
-| 4 | `test_write_to_register_zero_is_ignored` | Writing to register 0 | `regs[0]` stays 0 |
+| 3 | `test_register_zero_always_reads_zero` | Reading register 0 even if `_regs[0]` was changed directly | 0 |
+| 4 | `test_write_to_register_zero_is_ignored` | Writing to register 0 | `_regs[0]` stays 0 |
 | 5 | `test_write_and_read_register` | Normal register round trip | write 123 to `$8`, read 123 |
 | 6 | `test_register_31_is_writable` | Register 31 accepts writes | write 100, read 100 |
 | 7 | `test_write_reg_masks_value_to_32_bits` | Value wider than 32 bits | `0x1FFFFFFFF` stored as `0xFFFFFFFF` |

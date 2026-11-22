@@ -10,7 +10,7 @@ from moth.state import STACK_START, TEXT_START, State
 def test_state_initialization():
     state = State()
 
-    assert len(state.regs) == 32
+    assert len(state._regs) == 32
     assert state.pc == TEXT_START
     assert state.hi == 0
     assert state.lo == 0
@@ -26,7 +26,7 @@ def test_stack_pointer_initialization():
 def test_register_zero_always_reads_zero():
     state = State()
 
-    state.regs[0] = 123
+    state._regs[0] = 123
 
     assert state.read_reg(0) == 0
 
@@ -36,7 +36,7 @@ def test_write_to_register_zero_is_ignored():
 
     state.write_reg(0, 123)
 
-    assert state.regs[0] == 0
+    assert state._regs[0] == 0
     assert state.read_reg(0) == 0
 
 

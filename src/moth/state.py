@@ -41,7 +41,7 @@ def _initial_regs() -> list[int]:
 
 @dataclass
 class State:
-    regs: list[int] = field(default_factory=_initial_regs)
+    _regs: list[int] = field(default_factory=_initial_regs)
     pc: int = TEXT_START
     hi: int = 0
     lo: int = 0
@@ -50,11 +50,11 @@ class State:
 
     def read_reg(self, n: int) -> int:
         _validate_register_number(n)
-        # Register 0 always reads as 0, even if regs[0] was modified directly.
-        return 0 if n == 0 else self.regs[n]
+        # Register 0 always reads as 0, even if _regs[0] was modified directly.
+        return 0 if n == 0 else self._regs[n]
 
     def write_reg(self, n: int, value: int) -> None:
         _validate_register_number(n)
         # Register 0 ignores writes.
         if n != 0:
-            self.regs[n] = _mask32(value)
+            self._regs[n] = _mask32(value)
