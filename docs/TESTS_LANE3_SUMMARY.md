@@ -18,10 +18,10 @@ python -m pytest -v
 | Test file | Tests | Result |
 |---|---|---|
 | `tests/test_registers.py` | 10 | 10 passed |
-| `tests/test_memory.py` | 19 | 19 passed |
+| `tests/test_memory.py` | 20 | 20 passed |
 | `tests/test_state.py` | 22 | 22 passed |
-| Lane 3 total | 51 | 51 passed |
-| Whole project (`python -m pytest -v`) | 52 | 52 passed |
+| Lane 3 total | 52 | 52 passed |
+| Whole project (`python -m pytest -v`) | 53 | 53 passed |
 
 The whole-project run has one more test than Lane 3 because it also includes `tests/test_smoke.py`, which is not part of this lane.
 
@@ -66,7 +66,7 @@ Dict names: `REGISTER_NAME_TO_NUMBER` (assembler side) and `REGISTER_NUMBER_TO_N
 | 9 | `test_every_number_has_canonical_name` | Every number 0 to 31 has a name, and it is not numeric | no number missing |
 | 10 | `test_round_trip` | Both dicts agree (number -> name -> number) | same number comes back |
 
-## `tests/test_memory.py` (19 tests)
+## `tests/test_memory.py` (20 tests)
 
 | # | Test | What it checks | Expected |
 |---|---|---|---|
@@ -89,6 +89,7 @@ Dict names: `REGISTER_NAME_TO_NUMBER` (assembler side) and `REGISTER_NUMBER_TO_N
 | 17 | `test_load_bytes` | Bytes copied in land at consecutive addresses | `12 34 56 78` at addresses 0 to 3 |
 | 18 | `test_load_then_read_word` | A word read after `load` is correct | equals `int.from_bytes(data, BYTE_ORDER)` |
 | 19 | `test_word_at_data_start_follows_byte_order` | The sheet's case: `0x12345678` at `0x10010000` | four bytes match `to_bytes(4, BYTE_ORDER)` |
+| 20 | `test_negative_address_is_masked_to_32_bits` | A negative address and its 32-bit form | `-4` and `0xFFFFFFFC` hit the same word |
 
 ## `tests/test_state.py` (22 tests)
 

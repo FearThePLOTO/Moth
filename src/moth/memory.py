@@ -2,7 +2,6 @@
 #
 # TODO (when Lane 1 pushes bits.py):
 #   Replace the temporary _mask32 below with: from moth.bits import u32
-#   Only the writes (write_half, write_word) use it. Nothing else changes.
 
 
 BYTE_ORDER = "little"  # or "big"
@@ -40,7 +39,7 @@ class Memory:
     # Reads are always unsigned; lb/lh sign-extend in the interpreter.
 
     def read_byte(self, addr: int) -> int:
-        return self.data.get(addr, 0)
+        return self.data.get(_mask32(addr), 0)
 
     def read_half(self, addr: int) -> int:
         self._check_alignment(addr, 2)
@@ -53,7 +52,7 @@ class Memory:
     # Writes mask the value to the width being written.
 
     def write_byte(self, addr: int, value: int) -> None:
-        self.data[addr] = value & 0xFF
+        self.data[_mask32(addr)] = value & 0xFF
 
     def write_half(self, addr: int, value: int) -> None:
         self._check_alignment(addr, 2)

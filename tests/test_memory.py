@@ -1,5 +1,5 @@
 # TO RUN: python -m pytest tests/test_memory.py -v
-# Expected: 19 passed
+# Expected: 20 passed
 #
 # Note: test_little_endian_byte_order assumes BYTE_ORDER = "little".
 # If BYTE_ORDER is changed to "big", only that test is expected to fail.
@@ -173,3 +173,17 @@ def test_word_at_data_start_follows_byte_order():
     expected = (0x12345678).to_bytes(4, BYTE_ORDER)
     actual = bytes(memory.read_byte(0x10010000 + i) for i in range(4))
     assert actual == expected
+
+
+def test_negative_address_is_masked_to_32_bits():
+    memory = Memory()
+
+    memory.write_word(-4, 0x11223344)
+
+    assert memory.read_word(0xFFFFFFFC) == 0x11223344
+    assert sorted(memory.data) == [
+        0xFFFFFFFC,
+        0xFFFFFFFD,
+        0xFFFFFFFE,
+        0xFFFFFFFF,
+    ]
