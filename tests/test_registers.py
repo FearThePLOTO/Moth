@@ -17,7 +17,7 @@ def test_saved_and_special_registers():
 
 
 def test_numeric_names_are_accepted():
-    assert N["$8"] == 8
+    assert N["$0"] == 0
     assert N["$31"] == 31
 
 
@@ -42,8 +42,8 @@ def test_v_and_a_registers():
     assert N["$a3"] == 7
 
 
-def test_all_numeric_names_8_to_31():
-    for number in range(8, 32):
+def test_all_numeric_names_0_to_31():
+    for number in range(32):
         assert N[f"${number}"] == number
 
 

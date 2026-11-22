@@ -33,8 +33,8 @@ for i in range(2):
 for i in range(2):
     REGISTER_NAME_TO_NUMBER[f"$k{i}"] = i + 26
 
-# Numeric register names: $8 - $31 (MARS accepts them)
-for number in range(8, 32):
+# Numeric register names: $0 - $31 (MARS accepts them)
+for number in range(32):
     REGISTER_NAME_TO_NUMBER[f"${number}"] = number
 
 # Reverse mapping: register number to canonical name

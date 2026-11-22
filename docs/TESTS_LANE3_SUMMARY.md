@@ -27,7 +27,7 @@ The whole-project run has one more test than Lane 3 because it also includes `te
 
 ## What we test
 
-- **Registers:** names map to the right numbers (including the `$t8`/`$t9` trap), numeric names `$8` to `$31` are accepted, and the reverse dict returns canonical names.
+- **Registers:** names map to the right numbers (including the `$t8`/`$t9` trap), numeric names `$0` to `$31` are accepted, and the reverse dict returns canonical names.
 - **Memory:** byte, half and word reads and writes, little-endian byte order, masking, unsigned reads, alignment errors that carry the address, and `load`.
 - **State:** initial values, `$zero` always 0, register 31 writable, 32-bit masking, register number validation, and independence between `State` objects.
 
@@ -57,12 +57,12 @@ Dict names: `REGISTER_NAME_TO_NUMBER` (assembler side) and `REGISTER_NUMBER_TO_N
 |---|---|---|---|
 | 1 | `test_t8_t9_are_24_and_25` | `$t8` and `$t9` are not 16 and 17 | `$t8 = 24`, `$t9 = 25` |
 | 2 | `test_saved_and_special_registers` | One sample from the saved, stack and return groups | `$s0 = 16`, `$sp = 29`, `$ra = 31` |
-| 3 | `test_numeric_names_are_accepted` | First and last numeric name (MARS style) | `$8 = 8`, `$31 = 31` |
+| 3 | `test_numeric_names_are_accepted` | First and last numeric name (MARS style) | `$0 = 0`, `$31 = 31` |
 | 4 | `test_reverse_uses_canonical_names` | The reverse dict returns names, not `$8` | `8 -> $t0`, `24 -> $t8` |
 | 5 | `test_reverse_has_32_entries` | One entry per register, no extras | 32 entries |
 | 6 | `test_zero_and_at` | The two hand-written entries | `$zero = 0`, `$at = 1` |
 | 7 | `test_v_and_a_registers` | First and last of the `$v` and `$a` loops | `$v0 = 2`, `$v1 = 3`, `$a0 = 4`, `$a3 = 7` |
-| 8 | `test_all_numeric_names_8_to_31` | Every numeric name from `$8` to `$31` | each `$n = n` |
+| 8 | `test_all_numeric_names_0_to_31` | Every numeric name from `$0` to `$31` | each `$n = n` |
 | 9 | `test_every_number_has_canonical_name` | Every number 0 to 31 has a name, and it is not numeric | no number missing |
 | 10 | `test_round_trip` | Both dicts agree (number -> name -> number) | same number comes back |
 
@@ -121,4 +121,4 @@ Parametrized tests count once per value, so 14 test functions produce 22 tests.
 - `_mask32` is temporary and appears in both `memory.py` and `state.py`. When Lane 1 pushes `bits.py`, both are replaced by `from moth.bits import u32`, and the tests are run again.
 - `state.py` validates the register number (`ValueError` outside 0 to 31, `TypeError` for non-integers). This is an addition beyond the spec, so that `read_reg(-1)` cannot silently return `$ra`.
 - Initial values in `State` (all registers 0, `pc = 0x00400000`, `$sp = 0x7FFFFFFC`) are our choices. The spec does not state them explicitly.
-- Register names `$8` to `$31` are accepted as the sheet says. `$0` to `$7` are not added, because the sheet does not ask for them.
+- Register names `$0` to `$31` are accepted. MARS accepts all 32 numeric names.
