@@ -1,7 +1,5 @@
-
-
-# TO RUN :python -m pytest tests/test_registers.py -v
-
+# TO RUN: python -m pytest tests/test_registers.py -v
+# Expected: 10 passed
 
 from moth.registers import REGISTER_NAME_TO_NUMBER as N
 from moth.registers import REGISTER_NUMBER_TO_NAME as R
