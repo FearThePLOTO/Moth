@@ -3,8 +3,8 @@
 
 import pytest
 
-from moth.state import State, TEXT_START, STACK_START
 from moth.memory import Memory
+from moth.state import STACK_START, TEXT_START, State
 
 
 def test_state_initialization():

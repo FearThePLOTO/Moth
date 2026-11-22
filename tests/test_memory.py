@@ -6,7 +6,7 @@
 
 import pytest
 
-from moth.memory import Memory, AlignmentError, BYTE_ORDER
+from moth.memory import BYTE_ORDER, AlignmentError, Memory
 
 
 def test_read_unwritten_memory_returns_zero():
