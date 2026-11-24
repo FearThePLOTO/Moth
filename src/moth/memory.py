@@ -1,15 +1,8 @@
 # src/moth/memory.py
-#
-# TODO (when Lane 1 pushes bits.py):
-#   Replace the temporary _mask32 below with: from moth.bits import u32
 
+from moth.bits import u32
 
 BYTE_ORDER = "little"  # or "big"
-
-
-def _mask32(value: int) -> int:
-    # Temporary until Lane 1 provides bits.py. Replace with: from moth.bits import u32
-    return value & 0xFFFFFFFF
 
 
 class AlignmentError(Exception):
@@ -39,7 +32,7 @@ class Memory:
     # Reads are always unsigned; lb/lh sign-extend in the interpreter.
 
     def read_byte(self, addr: int) -> int:
-        return self.data.get(_mask32(addr), 0)
+        return self.data.get(u32(addr), 0)
 
     def read_half(self, addr: int) -> int:
         self._check_alignment(addr, 2)
@@ -52,15 +45,15 @@ class Memory:
     # Writes mask the value to the width being written.
 
     def write_byte(self, addr: int, value: int) -> None:
-        self.data[_mask32(addr)] = value & 0xFF
+        self.data[u32(addr)] = value & 0xFF
 
     def write_half(self, addr: int, value: int) -> None:
         self._check_alignment(addr, 2)
-        self._write_bytes(addr, _mask32(value) & 0xFFFF, 2)
+        self._write_bytes(addr, value & 0xFFFF, 2)
 
     def write_word(self, addr: int, value: int) -> None:
         self._check_alignment(addr, 4)
-        self._write_bytes(addr, _mask32(value), 4)
+        self._write_bytes(addr, u32(value), 4)
 
     def load(self, addr: int, data: bytes) -> None:
         # Used by the assembler to copy raw bytes in.
