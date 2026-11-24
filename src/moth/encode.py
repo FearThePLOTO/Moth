@@ -9,9 +9,7 @@ from moth.bits import u32
 
 def r_type(opcode, rs, rt, rd, shamt, funct):
     """R layout: opcode[31:26] rs[25:21] rt[20:16] rd[15:11] shamt[10:6] funct[5:0]."""
-    return u32(
-        (opcode << 26) | (rs << 21) | (rt << 16) | (rd << 11) | (shamt << 6) | funct
-    )
+    return u32((opcode << 26) | (rs << 21) | (rt << 16) | (rd << 11) | (shamt << 6) | funct)
 
 
 def i_type(opcode, rs, rt, imm):
