@@ -61,7 +61,7 @@ def test_negative_imm_does_not_touch_upper_fields():
 
 
 def test_oversized_imm_is_masked_not_raised():
-    assert i_type(0x08, 9, 8, 70000) == i_type(0x08, 9, 8, 70000 & 0xFFFF)
+    assert i_type(0x08, 9, 8, 70000) == 0x21281170
 
 
 def test_jump_target_is_masked_to_26_bits():
