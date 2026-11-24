@@ -118,7 +118,7 @@ Parametrized tests count once per value, so 14 test functions produce 22 tests.
 
 - `test_little_endian_byte_order` assumes `BYTE_ORDER = "little"` (confirmed with QtSPIM). Checked by switching the constant to `"big"`: only this test fails and the rest pass. The constant was then set back to `"little"`.
 - Reads are unsigned. `lb` and `lh` sign-extend in the interpreter, not in `memory.py`.
-- `_mask32` is temporary and appears in both `memory.py` and `state.py`. When Lane 1 pushes `bits.py`, both are replaced by `from moth.bits import u32`, and the tests are run again.
+- `memory.py` and `state.py` use `u32` from `moth.bits`. The temporary `_mask32` copies are gone.
 - `state.py` validates the register number (`ValueError` outside 0 to 31, `TypeError` for non-integers). This is an addition beyond the spec, so that `read_reg(-1)` cannot silently return `$ra`.
 - Initial values in `State` (all registers 0, `pc = 0x00400000`, `$sp = 0x7FFFFFFC`) are our choices. The spec does not state them explicitly.
 - Register names `$0` to `$31` are accepted. MARS accepts all 32 numeric names.

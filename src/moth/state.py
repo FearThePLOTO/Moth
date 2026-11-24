@@ -1,11 +1,8 @@
 # src/moth/state.py
-#
-# TODO (when Lane 1 pushes bits.py):
-#   Replace the temporary _mask32 below with: from moth.bits import u32
-#   Only write_reg uses it. Nothing else changes.
 
 from dataclasses import dataclass, field
 
+from moth.bits import u32
 from moth.memory import Memory
 from moth.registers import REGISTER_NAME_TO_NUMBER
 
@@ -16,11 +13,6 @@ STACK_START = 0x7FFFFFFC
 KERNEL_START = 0x80000000
 
 INITIAL_SP = STACK_START
-
-
-def _mask32(value: int) -> int:
-    # Temporary until Lane 1 provides bits.py. Replace with: from moth.bits import u32
-    return value & 0xFFFFFFFF
 
 
 def _validate_register_number(n: int) -> None:
@@ -57,4 +49,4 @@ class State:
         _validate_register_number(n)
         # Register 0 ignores writes.
         if n != 0:
-            self._regs[n] = _mask32(value)
+            self._regs[n] = u32(value)
