@@ -1,7 +1,11 @@
+# src/moth/decode.py
+#
+# Turns a 32-bit word into an instruction name and its fields.
+
 from dataclasses import dataclass
 
-from .bits import field, sext16
-from .isa import BY_OPCODE, BY_R
+from moth.bits import field, sext16
+from moth.isa import BY_OPCODE, BY_R
 
 
 @dataclass(frozen=True)
@@ -12,16 +16,15 @@ class Decoded:
 
 
 def decode(word: int) -> Decoded:
-    # Extract opcode
     opcode = field(word, 31, 26)
 
-    # R-Type
+    # R-type: opcode is 0, so look up the row by funct
     if opcode == 0:
         funct = field(word, 5, 0)
         instruction = BY_R.get((opcode, funct))
 
         if instruction is None:
-            raise ValueError(f"Unknown R-Type funct: {funct:#x}")
+            raise ValueError(f"Unknown R-type funct: {funct:#x}")
 
         fields = {
             "opcode": opcode,
@@ -32,32 +35,23 @@ def decode(word: int) -> Decoded:
             "funct": funct,
         }
 
-        return Decoded(
-            mnemonic=instruction.mnemonic,
-            fmt="R",
-            fields=fields,
-        )
+        return Decoded(instruction.mnemonic, "R", fields)
 
-    # I-Type and J-Type
     instruction = BY_OPCODE.get(opcode)
 
     if instruction is None:
         raise ValueError(f"Unknown opcode: {opcode:#x}")
 
-    # J-Type
+    # J-type
     if instruction.fmt == "J":
         fields = {
             "opcode": opcode,
             "target": field(word, 25, 0),
         }
 
-        return Decoded(
-            mnemonic=instruction.mnemonic,
-            fmt="J",
-            fields=fields,
-        )
+        return Decoded(instruction.mnemonic, "J", fields)
 
-    # I-Type
+    # I-type: imm is sign-extended
     fields = {
         "opcode": opcode,
         "rs": field(word, 25, 21),
@@ -65,8 +59,4 @@ def decode(word: int) -> Decoded:
         "imm": sext16(field(word, 15, 0)),
     }
 
-    return Decoded(
-        mnemonic=instruction.mnemonic,
-        fmt="I",
-        fields=fields,
-    )
+    return Decoded(instruction.mnemonic, "I", fields)

@@ -89,3 +89,56 @@ def test_decode_unknown_funct():
 
     with pytest.raises(ValueError):
         decode(word)
+
+
+def test_decode_jump_target_near_top():
+    result = decode(0x0BFFFFFF)
+
+    assert result.mnemonic == "j"
+    assert result.fields["target"] == 0x3FFFFFF
+
+
+def test_decode_syscall():
+    result = decode(0x0000000C)
+
+    assert result.mnemonic == "syscall"
+    assert result.fmt == "R"
+    assert result.fields == {
+        "opcode": 0,
+        "rs": 0,
+        "rt": 0,
+        "rd": 0,
+        "shamt": 0,
+        "funct": 0x0C,
+    }
+
+
+@pytest.mark.parametrize(
+    ("word", "mnemonic"),
+    [
+        (0x012A4020, "add"),
+        (0x02328022, "sub"),
+        (0x018D5824, "and"),
+        (0x00A62025, "or"),
+        (0x0085102A, "slt"),
+        (0x00094100, "sll"),
+        (0x000947C2, "srl"),
+        (0x03E00008, "jr"),
+        (0x01090018, "mult"),
+        (0x00005012, "mflo"),
+        (0x2008FFFC, "addi"),
+        (0x21497FFF, "addi"),
+        (0x312800FF, "andi"),
+        (0x3C081001, "lui"),
+        (0x8E080004, "lw"),
+        (0xAFA8FFF8, "sw"),
+        (0x80880000, "lb"),
+        (0x11090003, "beq"),
+        (0x15090002, "bne"),
+        (0x08100015, "j"),
+        (0x0C100015, "jal"),
+        (0x0000000C, "syscall"),
+    ],
+)
+def test_decode_matches_mars(word, mnemonic):
+    assert decode(word).mnemonic == mnemonic

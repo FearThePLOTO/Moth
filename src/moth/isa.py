@@ -1,14 +1,13 @@
 # src/moth/isa.py
 #
 # The instruction table. One row per instruction.
-# Other files only read this table. They never change it.
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class Instr:
-    mnemonic: str  # the name, like "add"
+    mnemonic: str
     fmt: str  # "R", "I" or "J"
     opcode: int  # top 6 bits
     funct: int | None = None  # bottom 6 bits, R-type only
@@ -58,6 +57,11 @@ TABLE = [
     Instr("j", "J", 0x02),
     Instr("jal", "J", 0x03),
 ]
+# Lookup by name (used by the assembler)
 BY_NAME = {i.mnemonic: i for i in TABLE}
+
+# R-type lookup by (opcode, funct)
 BY_R = {(i.opcode, i.funct): i for i in TABLE if i.fmt == "R"}
+
+# I and J lookup by opcode
 BY_OPCODE = {i.opcode: i for i in TABLE if i.fmt in ("I", "J")}
