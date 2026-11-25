@@ -1,6 +1,9 @@
 import re
 from pathlib import Path
 
+from moth.isa import BY_NAME
+from moth.registers import REGISTER_NAME_TO_NUMBER, REGISTER_NUMBER_TO_NAME
+
 _RULES_FILE = Path(__file__).with_name("PseudoOps.txt")
 _TOKEN_RE = re.compile(
     r"\$[A-Za-z0-9_]+|"
@@ -15,157 +18,6 @@ _TEMPLATE_TOKEN_RE = re.compile(
 _SYMBOL_EXPRESSION_RE = re.compile(
     r"([A-Za-z_\.][A-Za-z0-9_.$]*)(?:([+-])((?:0[xX][0-9A-Fa-f]+)|(?:\d[\d_]*)))?"
 )
-
-_REGISTER_ALIASES = {
-    "zero": 0,
-    "at": 1,
-    "v0": 2,
-    "v1": 3,
-    "a0": 4,
-    "a1": 5,
-    "a2": 6,
-    "a3": 7,
-    "t0": 8,
-    "t1": 9,
-    "t2": 10,
-    "t3": 11,
-    "t4": 12,
-    "t5": 13,
-    "t6": 14,
-    "t7": 15,
-    "s0": 16,
-    "s1": 17,
-    "s2": 18,
-    "s3": 19,
-    "s4": 20,
-    "s5": 21,
-    "s6": 22,
-    "s7": 23,
-    "t8": 24,
-    "t9": 25,
-    "k0": 26,
-    "k1": 27,
-    "gp": 28,
-    "sp": 29,
-    "fp": 30,
-    "s8": 30,
-    "ra": 31,
-}
-_REGISTER_NAMES = (
-    "zero",
-    "at",
-    "v0",
-    "v1",
-    "a0",
-    "a1",
-    "a2",
-    "a3",
-    "t0",
-    "t1",
-    "t2",
-    "t3",
-    "t4",
-    "t5",
-    "t6",
-    "t7",
-    "s0",
-    "s1",
-    "s2",
-    "s3",
-    "s4",
-    "s5",
-    "s6",
-    "s7",
-    "t8",
-    "t9",
-    "k0",
-    "k1",
-    "gp",
-    "sp",
-    "fp",
-    "ra",
-)
-_BASIC_MNEMONICS = {
-    "add",
-    "addu",
-    "sub",
-    "subu",
-    "addi",
-    "addiu",
-    "and",
-    "or",
-    "xor",
-    "andi",
-    "ori",
-    "xori",
-    "slt",
-    "sltu",
-    "slti",
-    "sltiu",
-    "beq",
-    "bne",
-    "j",
-    "jal",
-    "jr",
-    "jalr",
-    "bgez",
-    "bgezal",
-    "bltz",
-    "bltzal",
-    "blez",
-    "bgtz",
-    "div",
-    "divu",
-    "mult",
-    "multu",
-    "mul",
-    "mfhi",
-    "mflo",
-    "mthi",
-    "mtlo",
-    "sll",
-    "srl",
-    "sra",
-    "sllv",
-    "srlv",
-    "srav",
-    "lui",
-    "lb",
-    "lbu",
-    "lh",
-    "lhu",
-    "lw",
-    "lwl",
-    "lwr",
-    "sb",
-    "sh",
-    "sw",
-    "swl",
-    "swr",
-    "ll",
-    "sc",
-    "syscall",
-    "break",
-    "sync",
-    "mfc0",
-    "mtc0",
-    "mfc1",
-    "mtc1",
-    "cfc1",
-    "ctc1",
-    "lwc1",
-    "swc1",
-    "lwc2",
-    "swc2",
-    "eret",
-    "teq",
-    "tne",
-    "tlt",
-    "tltu",
-    "tge",
-    "tgeu",
-}
-
 
 _MEMORY_MNEMONICS = {
     "lb",
@@ -220,11 +72,20 @@ def _split(operands, expected_count):
 
 
 def _imm(text):
-    """read a decimal or hexa or binary or octal int"""
+    """read an int treating 32 bit hex values as signed like MARS"""
     try:
-        return int(text, 0)
+        value = int(text, 0)
     except ValueError as error:
         raise ValueError(f'"{text}" is not a number') from error
+
+    literal = text.strip().lower()
+    if literal.startswith("+"):
+        literal = literal[1:]
+    if literal.startswith("0x") and 0 <= value <= 0xFFFFFFFF:
+        if value & 0x80000000:
+            value -= 0x100000000
+
+    return value
 
 
 def _tokens(statement):
@@ -253,6 +114,8 @@ def _load_rules():
         raise RuntimeError(f"MARS pseudo-op definitions not found: {_RULES_FILE}")
 
     rules = {}
+    unsupported_rules = {}
+
     for line in _RULES_FILE.read_text(encoding="utf-8").splitlines():
         if not line or line.startswith("#"):
             continue
@@ -273,31 +136,37 @@ def _load_rules():
                 continue
             templates.append(item)
 
-        if templates:
+        supported = True
+        for template in templates:
+            if template in ("COMPACT", "DBNOP"):
+                continue
+
+            output_mnemonic = template.split(None, 1)[0]
+            if output_mnemonic not in BY_NAME:
+                supported = False
+                break
+
+        if templates and supported:
             rules.setdefault(source_tokens[0], []).append((source_tokens, templates))
+        elif templates:
+            unsupported_rules.setdefault(source_tokens[0], []).append(source_tokens)
 
-    return rules
+    return rules, unsupported_rules
 
 
-_RULES = _load_rules()
+_RULES, _UNSUPPORTED_RULES = _load_rules()
 
 
 def _register_number(token):
     if not token.startswith("$"):
         return None
 
-    name = token[1:]
-    if name.isdigit():
-        number = int(name)
-        if 0 <= number <= 31:
-            return number
-        return None
+    name = token.lower()
+    if name in REGISTER_NAME_TO_NUMBER:
+        return REGISTER_NAME_TO_NUMBER[name]
 
-    if name in _REGISTER_ALIASES:
-        return _REGISTER_ALIASES[name]
-
-    if name.startswith("f") and name[1:].isdigit():
-        number = int(name[1:])
+    if name.startswith("$f") and name[2:].isdigit():
+        number = int(name[2:])
         if 0 <= number <= 31:
             return number
 
@@ -470,7 +339,7 @@ def _substitute(token, source_tokens, symbols, delayed_branching):
             raise ValueError(f'cannot use next register after "{source_register}"')
         if source_register.startswith("$f"):
             return f"$f{number + 1}"
-        return f"${_REGISTER_NAMES[number + 1]}"
+        return REGISTER_NUMBER_TO_NAME[number + 1]
 
     if token.startswith("OP"):
         index = int(token[2:])
@@ -639,11 +508,7 @@ def _template_word_count(templates, delayed_branching):
 
 
 def expand(mnemonic, operands, symbols=None, delayed_branching=False):
-    """expand a MARS pseudo op returning None for a basic / unknown instruction
-    ``symbols`` maps labels to addresses ``delayed_branching`` selects the
-    MARS templates for delayed branch mode The official table's COMPACT forms
-    are selected when a supplied label address fits a signed 16 bit value
-    """
+    """expand a MARS pseudo-op, or return None for a basic instruction"""
     if symbols is None:
         symbols = {}
 
@@ -660,9 +525,10 @@ def expand(mnemonic, operands, symbols=None, delayed_branching=False):
     actual_count = _operand_count_hint(mnemonic, operands)
     operands_list = _split(operands, actual_count)
     expected_counts = _expected_operand_counts(mnemonic)
+
     if expected_counts and actual_count not in expected_counts:
-        if mnemonic in _BASIC_MNEMONICS:
-            return None  # e.g. the real two-operand "div $t0, $t1"
+        if mnemonic in BY_NAME:
+            return None
         if len(expected_counts) == 1:
             expected_text = str(next(iter(expected_counts)))
         else:
@@ -676,7 +542,11 @@ def expand(mnemonic, operands, symbols=None, delayed_branching=False):
 
     templates = _choose_rule(mnemonic, source_tokens)
     if templates is None:
-        if mnemonic in _RULES and mnemonic not in _BASIC_MNEMONICS:
+        unsupported_patterns = _UNSUPPORTED_RULES.get(mnemonic, [])
+        if any(_matches(pattern, source_tokens) for pattern in unsupported_patterns):
+            return None
+
+        if mnemonic in _RULES and mnemonic not in BY_NAME:
             raise ValueError(f"operands do not match a MARS {mnemonic} form")
         return None
 

@@ -44,6 +44,11 @@ def test_li_hexadecimal():
     ]
 
 
+def test_li_hex_twos_complement():
+    assert expand("li", "$t0, 0xFFFFFFFF", {}) == [("addiu", "$t0, $0, -1")]
+    assert word_count("li", "$t0, 0xFFFFFFFF") == 1
+
+
 def test_la_data_label():
     assert expand("la", "$t0, msg", SYMBOLS) == [
         ("lui", "$1, 4097"),
@@ -131,11 +136,16 @@ def test_all_examples_from_mars_pseudo_ops():
         operands = parts[1] if len(parts) > 1 else ""
 
         result = expand(mnemonic, operands, SYMBOLS)
+
         if result is None:
-            # MARS matches the real instruction first (e.g. lw $t1,100($t2)).
-            assert pseudo._is_basic_memory_form(pseudo._tokens(source)), source
+            source_tokens = pseudo._tokens(source)
+            assert (
+                pseudo._is_basic_memory_form(source_tokens)
+                or pseudo._choose_rule(mnemonic, source_tokens) is None
+            ), source
             assert word_count(mnemonic, operands, SYMBOLS) == 1, source
             continue
+
         assert word_count(mnemonic, operands, SYMBOLS) == len(result), source
 
 
