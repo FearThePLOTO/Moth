@@ -59,6 +59,19 @@ def test_decode_max_positive_immediate():
     assert result.fields["imm"] == 32767
 
 
+@pytest.mark.parametrize(
+    ("word", "imm"),
+    [
+        (0x3408FFFF, 0xFFFF),  # ori  $t0, $zero, 0xFFFF
+        (0x31288000, 0x8000),  # andi $t0, $t1, 0x8000
+        (0x3C08FFFF, 0xFFFF),  # lui  $t0, 0xFFFF
+        (0x3928FFFF, 0xFFFF),  # xori $t0, $t1, 0xFFFF
+    ],
+)
+def test_decode_logical_immediate_is_unsigned(word, imm):
+    assert decode(word).fields["imm"] == imm
+
+
 def test_decode_max_shamt():
     word = 0x00000FC0
 

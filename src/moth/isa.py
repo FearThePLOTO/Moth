@@ -11,6 +11,7 @@ class Instr:
     fmt: str  # "R", "I" or "J"
     opcode: int  # top 6 bits
     funct: int | None = None  # bottom 6 bits, R-type only
+    unsigned_imm: bool = False  # andi/ori/xori/lui: no sign extension
 
 
 TABLE = [
@@ -41,10 +42,10 @@ TABLE = [
     Instr("addiu", "I", 0x09),
     Instr("slti", "I", 0x0A),
     Instr("sltiu", "I", 0x0B),
-    Instr("andi", "I", 0x0C),
-    Instr("ori", "I", 0x0D),
-    Instr("xori", "I", 0x0E),
-    Instr("lui", "I", 0x0F),
+    Instr("andi", "I", 0x0C, unsigned_imm=True),
+    Instr("ori", "I", 0x0D, unsigned_imm=True),
+    Instr("xori", "I", 0x0E, unsigned_imm=True),
+    Instr("lui", "I", 0x0F, unsigned_imm=True),
     Instr("lb", "I", 0x20),
     Instr("lh", "I", 0x21),
     Instr("lw", "I", 0x23),

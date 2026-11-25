@@ -51,12 +51,13 @@ def decode(word: int) -> Decoded:
 
         return Decoded(instruction.mnemonic, "J", fields)
 
-    # I-type: imm is sign-extended
+    # I-type: logical immediates are unsigned, the rest are sign-extended
+    imm = field(word, 15, 0)
     fields = {
         "opcode": opcode,
         "rs": field(word, 25, 21),
         "rt": field(word, 20, 16),
-        "imm": sext16(field(word, 15, 0)),
+        "imm": imm if instruction.unsigned_imm else sext16(imm),
     }
 
     return Decoded(instruction.mnemonic, "I", fields)

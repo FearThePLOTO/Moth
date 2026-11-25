@@ -12,7 +12,8 @@ def test_roundtrip(instruction):
         expected = {"rs": 1, "rt": 2, "rd": 3, "shamt": 4, "funct": instruction.funct}
     elif instruction.fmt == "I":
         word = i_type(instruction.opcode, 1, 2, -4)
-        expected = {"rs": 1, "rt": 2, "imm": -4}
+        imm = 0xFFFC if instruction.unsigned_imm else -4
+        expected = {"rs": 1, "rt": 2, "imm": imm}
     else:
         word = j_type(instruction.opcode, 0x12345)
         expected = {"target": 0x12345}
