@@ -4,7 +4,6 @@ import re
 from ..model import Error, Instruction, Program
 from .line import Line
 
-
 TEXT_START = 0x00400000
 DATA_START = 0x10010000
 
