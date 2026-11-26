@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass
 
 
@@ -14,7 +13,7 @@ class Line:
 
 def remove_comment(text: str) -> tuple[str, str | None]:
     """Separate assembly code from its comment."""
-    in_quotes = False
+    quote = None
     escaped = False
 
     for index, char in enumerate(text):
@@ -22,14 +21,18 @@ def remove_comment(text: str) -> tuple[str, str | None]:
             escaped = False
             continue
 
-        if char == "\\" and in_quotes:
+        if char == "\\" and quote:
             escaped = True
             continue
 
-        if char == '"':
-            in_quotes = not in_quotes
+        if quote:
+            if char == quote:
+                quote = None
 
-        elif char == "#" and not in_quotes:
+        elif char in "\"'":
+            quote = char
+
+        elif char == "#":
             code = text[:index]
             comment = text[index + 1:]
             return code, comment.strip()
@@ -41,7 +44,10 @@ def extract_label(code: str) -> tuple[str | None, str]:
     """Extract an optional label from the beginning of a line."""
     code = code.strip()
 
-    if ":" not in code:
+    # A colon after the first quote belongs to a string or char literal.
+    head = code.split('"', 1)[0].split("'", 1)[0]
+
+    if ":" not in head:
         return None, code
 
     label, remaining = code.split(":", 1)
@@ -86,8 +92,15 @@ def parse_lines(source: str) -> list[Line]:
     """Parse all lines in an assembly source string."""
     lines = []
 
-    for line_number, text in enumerate(source.splitlines(), start=1):
-        line = parse_line(text, line_number)
+    source = source.removeprefix("\ufeff")
+    rows = source.split("\n")
+
+    # A final newline does not start another line.
+    if rows[-1] == "":
+        rows.pop()
+
+    for line_number, text in enumerate(rows, start=1):
+        line = parse_line(text.removesuffix("\r"), line_number)
         lines.append(line)
 
     return lines
