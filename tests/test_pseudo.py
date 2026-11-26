@@ -56,10 +56,13 @@ def test_la_data_label():
     ]
 
 
-def test_la_compact_label():
+def test_la_small_label_is_two_words():
     symbols = {"small": 0x1000}
-    assert expand("la", "$t0, small", symbols) == [("addi", "$t0, $0, 4096")]
-    assert word_count("la", "$t0, small", symbols) == 1
+    assert expand("la", "$t0, small", symbols) == [
+        ("lui", "$1, 0"),
+        ("ori", "$t0, $1, 4096"),
+    ]
+    assert word_count("la", "$t0, small", symbols) == 2
 
 
 def test_la_undefined_label():
@@ -134,14 +137,26 @@ def test_all_examples_from_mars_pseudo_ops():
         parts = source.split(None, 1)
         mnemonic = parts[0]
         operands = parts[1] if len(parts) > 1 else ""
+        source_tokens = pseudo._tokens(source)
+
+        unsupported = (
+            pseudo._choose_rule(mnemonic, source_tokens) is None
+            and not pseudo._uses_basic_immediate_form(mnemonic, source_tokens)
+            and any(
+                pseudo._matches(pattern, source_tokens)
+                for pattern in pseudo._UNSUPPORTED_RULES.get(mnemonic, [])
+            )
+        )
+        if unsupported:
+            with pytest.raises(ValueError, match="needs an instruction"):
+                expand(mnemonic, operands, SYMBOLS)
+            continue
 
         result = expand(mnemonic, operands, SYMBOLS)
 
         if result is None:
-            source_tokens = pseudo._tokens(source)
-            assert (
-                pseudo._is_basic_memory_form(source_tokens)
-                or pseudo._choose_rule(mnemonic, source_tokens) is None
+            assert mnemonic in pseudo.BY_NAME or pseudo._uses_basic_immediate_form(
+                mnemonic, source_tokens
             ), source
             assert word_count(mnemonic, operands, SYMBOLS) == 1, source
             continue
@@ -166,3 +181,9 @@ def test_memory_access_on_a_label_is_still_a_pseudo():
 def test_two_operand_div_is_a_real_instruction():
     assert expand("div", "$t0, $t1", SYMBOLS) is None
     assert word_count("div", "$t0, $t1", SYMBOLS) == 1
+
+
+def test_three_operand_div_raises_instead_of_looking_basic():
+    with pytest.raises(ValueError, match="needs an instruction"):
+        expand("div", "$t0, $t1, $t2", SYMBOLS)
+    assert word_count("div", "$t0, $t1, $t2", SYMBOLS) == 1

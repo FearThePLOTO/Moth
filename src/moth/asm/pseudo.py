@@ -13,7 +13,7 @@ _TOKEN_RE = re.compile(
 _TEMPLATE_TOKEN_RE = re.compile(
     r"RG\d+|NR\d+|OP\d+|"
     r"(?:VHL|VH|VL|LL|LH)\d+(?:P[1-4])?U?|"
-    r"LLP(?:U|P[1-4])?|LHPA(?:P[1-4])?|LHPN|LHL|LAB|S32|DBNOP|BROFF\d{2}"
+    r"LLP(?:U|P[1-4])?|LHPA(?:P[1-4])?|LHPN|LHL|LAB|S32|BROFF\d{2}"
 )
 _SYMBOL_EXPRESSION_RE = re.compile(
     r"([A-Za-z_\.][A-Za-z0-9_.$]*)(?:([+-])((?:0[xX][0-9A-Fa-f]+)|(?:\d[\d_]*)))?"
@@ -134,13 +134,16 @@ def _load_rules():
             item = column.strip()
             if not item or item.startswith("#"):
                 continue
+            if item == "COMPACT":
+                # Moth is never in compact memory mode, so the default form wins.
+                break
+            if item == "DBNOP":
+                # Delayed branching is off, so this marker emits nothing.
+                continue
             templates.append(item)
 
         supported = True
         for template in templates:
-            if template in ("COMPACT", "DBNOP"):
-                continue
-
             output_mnemonic = template.split(None, 1)[0]
             if output_mnemonic not in BY_NAME:
                 supported = False
@@ -295,30 +298,6 @@ def _expected_operand_counts(mnemonic):
     return counts
 
 
-def _compact_form(templates, source_tokens, symbols):
-    if "COMPACT" not in templates:
-        return templates
-
-    if not symbols:
-        return templates[: templates.index("COMPACT")]
-
-    for index, token in enumerate(source_tokens[1:], start=1):
-        expression = _parse_symbol_expression(token)
-        if expression is not None:
-            try:
-                address = _symbol_value_at(source_tokens, index, symbols)
-            except ValueError:
-                # A forward label has no address yet. Reserve the longer form;
-                # expansion will report an undefined label if it stays missing.
-                break
-            if -32768 <= address <= 32767:
-                start = templates.index("COMPACT") + 1
-                return templates[start:]
-            break
-
-    return templates[: templates.index("COMPACT")]
-
-
 def _signed_low(value):
     value &= 0xFFFF
     if value >= 0x8000:
@@ -326,7 +305,7 @@ def _signed_low(value):
     return value
 
 
-def _substitute(token, source_tokens, symbols, delayed_branching):
+def _substitute(token, source_tokens, symbols):
     if token.startswith("RG"):
         index = int(token[2:])
         return source_tokens[index]
@@ -351,17 +330,8 @@ def _substitute(token, source_tokens, symbols, delayed_branching):
     if token == "S32":
         return str(32 - _imm(source_tokens[-1]))
 
-    if token == "DBNOP":
-        if delayed_branching:
-            return "__DELAY_SLOT_NOP__"
-        return "__NO_INSTRUCTION__"
-
     if token.startswith("BROFF"):
-        without_delay = int(token[5])
-        with_delay = int(token[6])
-        if delayed_branching:
-            return str(with_delay)
-        return str(without_delay)
+        return token[5]
 
     match = re.fullmatch(r"(VHL|VH|VL|LL|LH)(\d+)(?:P([1-4]))?(U)?", token)
     if match:
@@ -422,11 +392,6 @@ def _substitute(token, source_tokens, symbols, delayed_branching):
 
 def _format_instruction(template):
     template = template.strip()
-    if template == "__NO_INSTRUCTION__":
-        return None
-    if template == "__DELAY_SLOT_NOP__":
-        return ("sll", "$zero, $zero, 0")
-
     first_space = template.find(" ")
     if first_space < 0:
         return (template, "")
@@ -439,14 +404,11 @@ def _format_instruction(template):
     return (mnemonic, operands)
 
 
-def _expand_templates(templates, source_tokens, symbols, delayed_branching):
+def _expand_templates(templates, source_tokens, symbols):
     instructions = []
     for template in templates:
-        if template == "COMPACT":
-            continue
-
         substituted = _TEMPLATE_TOKEN_RE.sub(
-            lambda match: _substitute(match.group(0), source_tokens, symbols, delayed_branching),
+            lambda match: _substitute(match.group(0), source_tokens, symbols),
             template,
         )
         instruction = _format_instruction(substituted)
@@ -494,21 +456,12 @@ def _uses_basic_immediate_form(mnemonic, source_tokens):
     return 0 <= immediate <= 65535
 
 
-def _template_word_count(templates, delayed_branching):
-    count = 0
-    for template in templates:
-        if template == "COMPACT":
-            continue
-        if template == "DBNOP":
-            if delayed_branching:
-                count += 1
-            continue
-        count += 1
-    return count
+def _template_word_count(templates):
+    return len(templates)
 
 
-def expand(mnemonic, operands, symbols=None, delayed_branching=False):
-    """expand a MARS pseudo-op, or return None for a basic instruction"""
+def expand(mnemonic, operands, symbols=None):
+    """expand a MARS pseudo-op, or return None for an instruction the ISA encodes directly"""
     if symbols is None:
         symbols = {}
 
@@ -544,14 +497,13 @@ def expand(mnemonic, operands, symbols=None, delayed_branching=False):
     if templates is None:
         unsupported_patterns = _UNSUPPORTED_RULES.get(mnemonic, [])
         if any(_matches(pattern, source_tokens) for pattern in unsupported_patterns):
-            return None
+            raise ValueError(f"{mnemonic} form needs an instruction the ISA does not have yet")
 
         if mnemonic in _RULES and mnemonic not in BY_NAME:
             raise ValueError(f"operands do not match a MARS {mnemonic} form")
         return None
 
-    selected = _compact_form(templates, source_tokens, symbols)
-    return _expand_templates(selected, source_tokens, symbols, delayed_branching)
+    return _expand_templates(templates, source_tokens, symbols)
 
 
 def _operand_count_hint(mnemonic, operands):
@@ -581,7 +533,7 @@ def _operand_count_hint(mnemonic, operands):
     return count
 
 
-def word_count(mnemonic, operands, symbols=None, delayed_branching=False):
+def word_count(mnemonic, operands, symbols=None):
     """return the pseudo expansion word count invalid lines reserve one"""
     try:
         if mnemonic == "nop":
@@ -602,7 +554,6 @@ def word_count(mnemonic, operands, symbols=None, delayed_branching=False):
         if templates is None:
             return 1
 
-        selected = _compact_form(templates, source_tokens, symbols or {})
-        return _template_word_count(selected, delayed_branching)
+        return _template_word_count(templates)
     except (ValueError, RuntimeError):
         return 1
