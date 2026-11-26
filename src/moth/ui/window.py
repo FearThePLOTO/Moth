@@ -3,13 +3,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
-    QHBoxLayout,
     QVBoxLayout,
     QWidget,
 )

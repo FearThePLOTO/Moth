@@ -4,11 +4,13 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
+
 from moth.ui.window import MainWindow
 
 
 def test_main_window():
     app = QApplication.instance() or QApplication([])
+    assert app is not None
 
     window = MainWindow()
 
