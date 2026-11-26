@@ -1,4 +1,3 @@
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
@@ -151,9 +150,7 @@ class MainWindow(QMainWindow):
 
         value_label = QLabel("--")
         value_label.setObjectName("infoValue")
-        value_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         layout.addWidget(title_label)
         layout.addWidget(value_label)
@@ -212,25 +209,19 @@ class MainWindow(QMainWindow):
 
         self.source = QTextEdit()
         self.source.setReadOnly(True)
-        self.source.setLineWrapMode(
-            QTextEdit.LineWrapMode.NoWrap
-        )
+        self.source.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.source.setPlainText("\n".join(PROGRAM))
 
         source_layout.addWidget(self.source)
         upper_layout.addWidget(source_panel, 55)
 
         # Register panel
-        register_panel, register_layout = self.create_panel(
-            "Register Update"
-        )
+        register_panel, register_layout = self.create_panel("Register Update")
 
         self.register_name = QLabel("$t0")
         self.register_label = self.register_name
 
-        self.register_name.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        self.register_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.register_name.setStyleSheet("""
             color: #E5A9AE;
             font-size: 27px;
@@ -240,19 +231,11 @@ class MainWindow(QMainWindow):
 
         register_layout.addWidget(self.register_name)
 
-        previous_container, self.previous_value = (
-            self.create_info_item("Previous Value")
-        )
-        new_container, self.new_value = (
-            self.create_info_item("New Value")
-        )
+        previous_container, self.previous_value = self.create_info_item("Previous Value")
+        new_container, self.new_value = self.create_info_item("New Value")
 
-        self.previous_value.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-        self.new_value.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        self.previous_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.new_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.previous_value.setStyleSheet("""
             font-size: 21px;
@@ -274,22 +257,14 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(upper_layout, 3)
 
         # Instruction Details panel
-        instruction_panel, instruction_layout = self.create_panel(
-            "Instruction Details"
-        )
+        instruction_panel, instruction_layout = self.create_panel("Instruction Details")
 
         info_layout = QHBoxLayout()
         info_layout.setSpacing(30)
 
-        address_container, self.address_label = (
-            self.create_info_item("Address")
-        )
-        word_container, self.word_label = (
-            self.create_info_item("Machine Word")
-        )
-        pc_container, self.pc_label = (
-            self.create_info_item("Next PC")
-        )
+        address_container, self.address_label = self.create_info_item("Address")
+        word_container, self.word_label = self.create_info_item("Machine Word")
+        pc_container, self.pc_label = self.create_info_item("Next PC")
 
         info_layout.addWidget(address_container)
         info_layout.addWidget(word_container)
@@ -299,27 +274,19 @@ class MainWindow(QMainWindow):
 
         self.bit_table = QTableWidget()
         self.bit_table.setColumnCount(2)
-        self.bit_table.setHorizontalHeaderLabels(
-            ["Field", "Binary Value"]
-        )
+        self.bit_table.setHorizontalHeaderLabels(["Field", "Binary Value"])
         self.bit_table.setRowCount(6)
         self.bit_table.horizontalHeader().setStretchLastSection(True)
         self.bit_table.verticalHeader().setVisible(False)
-        self.bit_table.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
-        )
-        self.bit_table.setSelectionMode(
-            QTableWidget.SelectionMode.NoSelection
-        )
+        self.bit_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.bit_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
 
         instruction_layout.addWidget(self.bit_table)
         main_layout.addWidget(instruction_panel, 4)
 
         # Navigation buttons
         buttons_layout = QHBoxLayout()
-        buttons_layout.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
+        buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         buttons_layout.setSpacing(22)
 
         self.previous_button = QPushButton("Previous")
@@ -342,23 +309,16 @@ class MainWindow(QMainWindow):
         cursor.movePosition(QTextCursor.MoveOperation.Start)
 
         for _ in range(line_number):
-            if not cursor.movePosition(
-                QTextCursor.MoveOperation.Down
-            ):
+            if not cursor.movePosition(QTextCursor.MoveOperation.Down):
                 break
 
         selection = QTextEdit.ExtraSelection()
         selection.format.setBackground(QColor("#70434A"))
         selection.format.setForeground(QColor("#FFFFFF"))
-        selection.format.setProperty(
-            QTextCharFormat.Property.FullWidthSelection,
-            True
-        )
+        selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
 
         selection.cursor = cursor
-        selection.cursor.select(
-            QTextCursor.SelectionType.LineUnderCursor
-        )
+        selection.cursor.select(QTextCursor.SelectionType.LineUnderCursor)
 
         selections.append(selection)
         self.source.setExtraSelections(selections)
@@ -367,23 +327,15 @@ class MainWindow(QMainWindow):
         snapshot = SNAPSHOTS[self.step_index]
 
         # Step counter
-        self.step_counter.setText(
-            f"Step {self.step_index + 1} / {len(SNAPSHOTS)}"
-        )
+        self.step_counter.setText(f"Step {self.step_index + 1} / {len(SNAPSHOTS)}")
 
         # Highlight current source line
         self.highlight_current_line(snapshot.line)
 
         # Instruction information
-        self.address_label.setText(
-            f"0x{snapshot.address:08X}"
-        )
-        self.word_label.setText(
-            f"0x{snapshot.word:08X}"
-        )
-        self.pc_label.setText(
-            f"0x{snapshot.pc:08X}"
-        )
+        self.address_label.setText(f"0x{snapshot.address:08X}")
+        self.word_label.setText(f"0x{snapshot.word:08X}")
+        self.pc_label.setText(f"0x{snapshot.pc:08X}")
 
         # Determine instruction type from opcode
         opcode = (snapshot.word >> 26) & 0x3F
@@ -394,12 +346,8 @@ class MainWindow(QMainWindow):
         self.bit_table.setRowCount(len(fields))
 
         for row, (field_name, field_value) in enumerate(fields):
-            self.bit_table.setItem(
-                row, 0, QTableWidgetItem(str(field_name))
-            )
-            self.bit_table.setItem(
-                row, 1, QTableWidgetItem(str(field_value))
-            )
+            self.bit_table.setItem(row, 0, QTableWidgetItem(str(field_name)))
+            self.bit_table.setItem(row, 1, QTableWidgetItem(str(field_value)))
 
         self.bit_table.resizeColumnsToContents()
 
@@ -410,19 +358,12 @@ class MainWindow(QMainWindow):
                 9: "$t1",
             }
 
-            register_name = register_names.get(
-                snapshot.reg_written,
-                f"$r{snapshot.reg_written}"
-            )
+            register_name = register_names.get(snapshot.reg_written, f"$r{snapshot.reg_written}")
 
             self.register_name.setText(register_name)
 
-            self.previous_value.setText(
-                f"0x{snapshot.previous:08X}"
-            )
-            self.new_value.setText(
-                f"0x{snapshot.value:08X}"
-            )
+            self.previous_value.setText(f"0x{snapshot.previous:08X}")
+            self.new_value.setText(f"0x{snapshot.value:08X}")
         else:
             self.register_name.setText("No Register")
             self.previous_value.setText("--")
@@ -430,9 +371,7 @@ class MainWindow(QMainWindow):
 
         # Navigation buttons
         self.previous_button.setEnabled(self.step_index > 0)
-        self.next_button.setEnabled(
-            self.step_index < len(SNAPSHOTS) - 1
-        )
+        self.next_button.setEnabled(self.step_index < len(SNAPSHOTS) - 1)
 
     def next_step(self):
         if self.step_index < len(SNAPSHOTS) - 1:
@@ -443,6 +382,3 @@ class MainWindow(QMainWindow):
         if self.step_index > 0:
             self.step_index -= 1
             self.update_ui()
-
-
-
