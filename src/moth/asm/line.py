@@ -34,7 +34,7 @@ def remove_comment(text: str) -> tuple[str, str | None]:
 
         elif char == "#":
             code = text[:index]
-            comment = text[index + 1:]
+            comment = text[index + 1 :]
             return code, comment.strip()
 
     return text, None

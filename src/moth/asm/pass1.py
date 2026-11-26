@@ -284,19 +284,13 @@ def pass1(lines: list[Line]) -> Program:
 
     # Process source lines
     for line in lines:
-
-        mnemonic = (
-            line.mnemonic.lower()
-            if line.mnemonic is not None
-            else None
-        )
+        mnemonic = line.mnemonic.lower() if line.mnemonic is not None else None
 
         # Skip empty lines and comment-only lines
         if mnemonic is None and line.label is None:
             continue
 
         if line.label is not None:
-
             if not LABEL_PATTERN.fullmatch(line.label):
                 add_error(errors, line, f'Invalid label: "{line.label}"')
 
@@ -368,7 +362,6 @@ def pass1(lines: list[Line]) -> Program:
 
         # Handle data directives
         if mnemonic in DATA_DIRECTIVES:
-
             if current_section != "data":
                 add_error(
                     errors,
