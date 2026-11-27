@@ -1,4 +1,5 @@
 """Main window for MIPS Assembler and Debugger."""
+
 import html
 from string import Template
 
@@ -195,9 +196,7 @@ class CodeEditor(QPlainTextEdit):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         cr = self.contentsRect()
-        self.area.setGeometry(
-            QRect(cr.left(), cr.top(), self.number_width(), cr.height())
-        )
+        self.area.setGeometry(QRect(cr.left(), cr.top(), self.number_width(), cr.height()))
 
     def paint_numbers(self, event):
         painter = QPainter(self.area)
@@ -205,20 +204,14 @@ class CodeEditor(QPlainTextEdit):
 
         block = self.firstVisibleBlock()
         number = block.blockNumber()
-        top = round(
-            self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
-        )
+        top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
         bottom = top + round(self.blockBoundingRect(block).height())
         current = self.textCursor().blockNumber()
         height = self.fontMetrics().height()
 
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
-                painter.setPen(
-                    QColor(
-                        C["accent_dark"] if number == current else C["muted"]
-                    )
-                )
+                painter.setPen(QColor(C["accent_dark"] if number == current else C["muted"]))
                 painter.drawText(
                     0,
                     top,
@@ -236,9 +229,7 @@ class CodeEditor(QPlainTextEdit):
     def highlight_line(self):
         selection = QTextEdit.ExtraSelection()
         selection.format.setBackground(QColor("#EADCCB"))
-        selection.format.setProperty(
-            QTextFormat.Property.FullWidthSelection, True
-        )
+        selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         selection.cursor = self.textCursor()
         selection.cursor.clearSelection()
         self.setExtraSelections([selection])
@@ -285,19 +276,11 @@ class RegisterTable(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(24)
 
-        self.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch
-        )
+        self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
 
-        self.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
-        )
-        self.setSelectionMode(
-            QAbstractItemView.SelectionMode.NoSelection
-        )
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.setShowGrid(False)
         self.setFont(mono(10))
 
@@ -307,21 +290,13 @@ class RegisterTable(QTableWidget):
             self._cells[name] = row
 
             self.setItem(row, 0, QTableWidgetItem(name))
-            self.setItem(
-                row, 1, QTableWidgetItem("0x00000000")
-            )
+            self.setItem(row, 1, QTableWidgetItem("0x00000000"))
 
     def update_values(self, snapshot, changed=None):
         for name, row in self._cells.items():
-            self.item(row, 1).setText(
-                f"0x{snapshot[name]:08x}"
-            )
+            self.item(row, 1).setText(f"0x{snapshot[name]:08x}")
 
-            color = (
-                QColor(C["accent_soft"])
-                if name == changed
-                else QColor(C["surface"])
-            )
+            color = QColor(C["accent_soft"]) if name == changed else QColor(C["surface"])
 
             self.item(row, 0).setBackground(color)
             self.item(row, 1).setBackground(color)
@@ -367,9 +342,7 @@ class MothWindow(QMainWindow):
         self.act_assemble = self._action("Assemble", self.assemble, "F7")
         self.act_run = self._action("Run", self.run, "F5", enabled=False)
         self.act_step = self._action("Step", self.step, "F10", enabled=False)
-        self.act_reset = self._action(
-            "Reset", self.reset, "Shift+F5", enabled=False
-        )
+        self.act_reset = self._action("Reset", self.reset, "Shift+F5", enabled=False)
 
     def _build_menu(self):
         bar = self.menuBar()
@@ -388,9 +361,7 @@ class MothWindow(QMainWindow):
         edit_menu.addAction(self._action("Paste", self.editor.paste))
 
         view_menu = bar.addMenu("&View")
-        view_menu.addAction(
-            self._action("Clear terminal", self.terminal.clear)
-        )
+        view_menu.addAction(self._action("Clear terminal", self.terminal.clear))
 
         sim_menu = bar.addMenu("&Simulator")
         for act in (
@@ -471,10 +442,7 @@ class MothWindow(QMainWindow):
         lay.setContentsMargins(12, 12, 12, 12)
 
         row = QHBoxLayout()
-        self.fields = [
-            Field(n)
-            for n in ("opcode", "rs", "rt", "rd", "shamt", "funct")
-        ]
+        self.fields = [Field(n) for n in ("opcode", "rs", "rt", "rd", "shamt", "funct")]
 
         for field in self.fields:
             row.addWidget(field)
@@ -526,8 +494,7 @@ class MothWindow(QMainWindow):
     def log(self, text, accent=False):
         if accent:
             self.terminal.appendHtml(
-                f'<span style="color:{C["accent"]}">'
-                f'{html.escape(text)}</span>'
+                f'<span style="color:{C["accent"]}">{html.escape(text)}</span>'
             )
         else:
             self.terminal.appendPlainText(text)
@@ -537,8 +504,7 @@ class MothWindow(QMainWindow):
         steps = self.machine.steps if self.machine else 0
 
         self.status.setText(
-            f"PC 0x{pc:08x}      instruction {steps}      "
-            f"errors 0      {self.state}"
+            f"PC 0x{pc:08x}      instruction {steps}      errors 0      {self.state}"
         )
 
     def show_word(self, word, text):
@@ -594,9 +560,7 @@ class MothWindow(QMainWindow):
 
     def show_result(self, res):
         self.show_word(res.word, res.text)
-        self.registers.update_values(
-            self.machine.snapshot(), res.reg
-        )
+        self.registers.update_values(self.machine.snapshot(), res.reg)
 
         self.editor.goto_line(res.line)
 
@@ -638,8 +602,7 @@ class MothWindow(QMainWindow):
 
         self.execute_view.setPlainText(
             "\n".join(
-                f"0x{TEXT_BASE + 8 + 4 * i:08x}  "
-                f"0x{word:08x}  {text}"
+                f"0x{TEXT_BASE + 8 + 4 * i:08x}  0x{word:08x}  {text}"
                 for i, (_line, text, word) in enumerate(PROGRAM)
             )
         )
@@ -658,9 +621,7 @@ class MothWindow(QMainWindow):
         self.show_word(first_word, first_text)
 
         self.state = "ready"
-        self.log(
-            f"assembled {len(PROGRAM)} instructions, 0 errors"
-        )
+        self.log(f"assembled {len(PROGRAM)} instructions, 0 errors")
         self.refresh_status()
 
     def step(self):

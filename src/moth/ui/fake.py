@@ -12,17 +12,41 @@ end:
 """
 
 LEFT_REGS = [
-    "$zero", "$at", "$v0", "$v1",
-    "$a0", "$a1", "$a2", "$a3",
-    "$t0", "$t1", "$t2", "$t3",
-    "$t4", "$t5", "$t6", "$t7",
+    "$zero",
+    "$at",
+    "$v0",
+    "$v1",
+    "$a0",
+    "$a1",
+    "$a2",
+    "$a3",
+    "$t0",
+    "$t1",
+    "$t2",
+    "$t3",
+    "$t4",
+    "$t5",
+    "$t6",
+    "$t7",
 ]
 
 RIGHT_REGS = [
-    "$t8", "$t9", "$s0", "$s1",
-    "$s2", "$s3", "$s4", "$s5",
-    "$s6", "$s7", "$k0", "$k1",
-    "$gp", "$sp", "$fp", "$ra",
+    "$t8",
+    "$t9",
+    "$s0",
+    "$s1",
+    "$s2",
+    "$s3",
+    "$s4",
+    "$s5",
+    "$s6",
+    "$s7",
+    "$k0",
+    "$k1",
+    "$gp",
+    "$sp",
+    "$fp",
+    "$ra",
 ]
 
 PROGRAM = [
@@ -127,10 +151,7 @@ class FakeMachine:
         elif self.pc == TEXT_BASE + 20:
             word = 0x08100006
 
-            target = (
-                ((word & 0x03FFFFFF) << 2)
-                | ((self.pc + 4) & 0xF0000000)
-            )
+            target = ((word & 0x03FFFFFF) << 2) | ((self.pc + 4) & 0xF0000000)
 
             self.pc = target
             self.halted = True
