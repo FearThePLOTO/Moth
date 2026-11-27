@@ -35,6 +35,27 @@ jobs:
       - name: Test
         run: python -m pytest
 
+  ui:
+    name: ui (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev,ui]"
+      - name: Test UI
+        run: python -m pytest
+
   lint:
     name: lint
     runs-on: ubuntu-latest
