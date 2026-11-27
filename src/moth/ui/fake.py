@@ -47,6 +47,9 @@ RIGHT_REGS = [
     "$sp",
     "$fp",
     "$ra",
+    "hi",
+    "lo",
+    "pc",
 ]
 
 PROGRAM = [
@@ -87,6 +90,7 @@ class FakeMachine:
         self.regs = {name: 0 for name in LEFT_REGS + RIGHT_REGS}
         self.regs["$t0"] = 0
         self.regs["$t1"] = 5
+        self.regs["pc"] = self.pc
         self.loop_count = 0
 
     def snapshot(self):
@@ -172,5 +176,6 @@ class FakeMachine:
 
         self.steps += 1
         self.regs["$zero"] = 0
+        self.regs["pc"] = self.pc
 
         return result

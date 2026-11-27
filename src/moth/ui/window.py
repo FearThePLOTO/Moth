@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -108,6 +109,10 @@ QPushButton {
     background: $surface; color: $text;
 }
 QPushButton:hover { border-color: $accent; color: $accent; }
+
+QSplitter::handle { background: $border; }
+QSplitter::handle:horizontal { width: 4px; }
+QSplitter::handle:vertical { height: 4px; }
 
 QStatusBar { background: $surface; border-top: 1px solid $border; }
 QStatusBar QLabel { color: $muted; }
@@ -254,10 +259,12 @@ class Field(QFrame):
         self.label = QLabel(label)
         self.label.setObjectName("fieldLabel")
         self.label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         self.value = QLabel("-")
         self.value.setFont(mono(12))
         self.value.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         lay.addWidget(self.label)
         lay.addWidget(self.value)
@@ -283,7 +290,8 @@ class RegisterTable(QTableWidget):
         self.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
 
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setShowGrid(False)
         self.setFont(mono(10))
 
@@ -315,6 +323,7 @@ class MothWindow(QMainWindow):
         self.resize(1280, 860)
 
         self.machine = None
+        self.path = None
         self.state = "idle"
 
         # Timer makes Run visibly move through instructions.
@@ -344,6 +353,7 @@ class MothWindow(QMainWindow):
 
     def _build_actions(self):
         self.act_open = self._action("Open", self.open_file, "Ctrl+O")
+        self.act_save = self._action("Save", self.save_file, "Ctrl+S")
         self.act_assemble = self._action("Assemble", self.assemble, "F7")
         self.act_run = self._action("Run", self.run, "F5", enabled=False)
         self.act_step = self._action("Step", self.step, "F10", enabled=False)
@@ -354,6 +364,7 @@ class MothWindow(QMainWindow):
 
         file_menu = bar.addMenu("&File")
         file_menu.addAction(self.act_open)
+        file_menu.addAction(self.act_save)
         file_menu.addSeparator()
         file_menu.addAction(self._action("Exit", self.close))
 
@@ -419,23 +430,29 @@ class MothWindow(QMainWindow):
         self.tabs.addTab(self.editor, "Edit")
         self.tabs.addTab(self.execute_view, "Execute")
 
-        left = QVBoxLayout()
-        left.addWidget(self.tabs, 1)
+        left = QSplitter(Qt.Orientation.Vertical)
+        left.addWidget(self.tabs)
         left.addWidget(self._build_word_panel())
+        left.setStretchFactor(0, 3)
+        left.setStretchFactor(1, 1)
 
-        # Registers only; Current Instruction panel removed.
         self.registers = RegisterTable()
+        self.registers.setMinimumHeight(120)
+        registers = panel("Registers", self.registers)
 
-        right = QVBoxLayout()
-        right.addWidget(panel("Registers", self.registers), 1)
+        columns = QSplitter(Qt.Orientation.Horizontal)
+        columns.addWidget(left)
+        columns.addWidget(registers)
+        columns.setStretchFactor(0, 3)
+        columns.setStretchFactor(1, 2)
 
-        columns = QHBoxLayout()
-        columns.setSpacing(16)
-        columns.addLayout(left, 3)
-        columns.addLayout(right, 2)
+        body = QSplitter(Qt.Orientation.Vertical)
+        body.addWidget(columns)
+        body.addWidget(self._build_terminal_panel())
+        body.setStretchFactor(0, 4)
+        body.setStretchFactor(1, 1)
 
-        root.addLayout(columns, 1)
-        root.addWidget(self._build_terminal_panel())
+        root.addWidget(body, 1)
 
         self.status = QLabel()
         self.status.setFont(mono(9))
@@ -489,10 +506,7 @@ class MothWindow(QMainWindow):
         clear = QPushButton("Clear")
         clear.clicked.connect(self.terminal.clear)
 
-        box = panel("Messages / Terminal", self.terminal, clear)
-        box.setMaximumHeight(200)
-
-        return box
+        return panel("Messages / Terminal", self.terminal, clear)
 
     # ------------------------------------------------------------- helpers
 
@@ -569,18 +583,6 @@ class MothWindow(QMainWindow):
 
         self.editor.goto_line(res.line)
 
-    def show_next_instruction(self):
-        """Highlight the next instruction based on the machine PC."""
-        if self.machine is None or self.machine.halted:
-            return
-
-        index = (self.machine.pc - (TEXT_BASE + 8)) // 4
-
-        if 0 <= index < len(PROGRAM):
-            line, text, word = PROGRAM[index]
-            self.editor.goto_line(line)
-            self.show_word(word, text)
-
     # --------------------------------------------------------------- slots
 
     def open_file(self):
@@ -597,7 +599,29 @@ class MothWindow(QMainWindow):
             with open(path, encoding="utf-8") as fh:
                 self.editor.setPlainText(fh.read())
 
+            self.path = path
             self.log(f"opened {path}")
+
+    def save_file(self):
+        if not self.path:
+            self.path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save assembly",
+                "",
+                "Assembly (*.asm *.s);;All files (*)",
+            )
+
+            if not self.path:
+                return
+
+        try:
+            with open(self.path, "w", encoding="utf-8") as fh:
+                fh.write(self.editor.toPlainText())
+        except OSError as exc:
+            QMessageBox.warning(self, "Save failed", str(exc))
+            return
+
+        self.log(f"saved {self.path}")
 
     def assemble(self):
         self.stop_run()
@@ -656,7 +680,6 @@ class MothWindow(QMainWindow):
             self.act_step.setEnabled(False)
             self.state = "halted"
         else:
-            self.show_next_instruction()
             self.state = "running" if self.run_timer.isActive() else "paused"
 
         self.refresh_status()

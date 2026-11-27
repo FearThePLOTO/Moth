@@ -5,7 +5,8 @@ import pytest
 pytest.importorskip("PySide6")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QAbstractItemView, QApplication, QSplitter
 
 from moth.ui.fake import PROGRAM
 from moth.ui.window import MothWindow
@@ -22,6 +23,22 @@ def test_window_creation(app):
     assert window.windowTitle() == "MIPS Assembler and Debugger"
     assert window.editor is not None
     assert window.registers is not None
+    assert len(window.findChildren(QSplitter)) == 3
+    assert {"hi", "lo", "pc"} <= window.registers._cells.keys()
+
+    flags = window.fields[0].value.textInteractionFlags()
+    assert flags & Qt.TextInteractionFlag.TextSelectableByMouse
+    assert window.registers.selectionMode() == QAbstractItemView.SelectionMode.ExtendedSelection
+
+
+def test_save(app, tmp_path):
+    window = MothWindow()
+    window.editor.setPlainText(".text\n")
+    window.path = str(tmp_path / "program.asm")
+
+    window.save_file()
+
+    assert (tmp_path / "program.asm").read_text() == ".text\n"
 
 
 def test_assemble(app):
@@ -56,10 +73,14 @@ def test_step(app):
     window.step()
     assert window.machine.steps == 1
     assert window.machine.regs["$t0"] == 5
+    assert window.word_text.text() == "add  $t0, $t0, $t1"
+    assert window.editor.textCursor().blockNumber() == 2
 
     window.step()
     assert window.machine.steps == 2
     assert window.machine.regs["$t1"] == 4
+    assert window.word_text.text() == "addi $t1, $t1, -1"
+    assert window.editor.textCursor().blockNumber() == 3
 
 
 def test_reset(app):
