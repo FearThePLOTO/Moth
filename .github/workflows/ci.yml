@@ -51,10 +51,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Install Qt system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1
       - name: Install
         run: python -m pip install -e ".[dev,ui]"
       - name: Test UI
-        run: python -m pytest
+        run: python -m pytest -rs
 
   lint:
     name: lint
