@@ -1,384 +1,742 @@
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
+"""Main window for MIPS Assembler and Debugger."""
+import html
+from string import Template
+
+from PySide6.QtCore import QRect, QSize, Qt, QTimer
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QFontDatabase,
+    QKeySequence,
+    QPainter,
+    QTextCursor,
+    QTextFormat,
+)
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from .fake import PROGRAM, SNAPSHOTS, get_fields
+from moth.ui.fake import (
+    LEFT_REGS,
+    PROGRAM,
+    RIGHT_REGS,
+    SOURCE,
+    TEXT_BASE,
+    FakeMachine,
+)
+
+# Brown and cream color palette.
+C = {
+    "bg": "#F5EFE6",
+    "surface": "#FFFCF7",
+    "surface_alt": "#F0E6D9",
+    "border": "#DCCDBB",
+    "text": "#594333",
+    "muted": "#927D69",
+    "accent": "#9A7051",
+    "accent_dark": "#745139",
+    "accent_soft": "#EADCCB",
+    "accent_hover": "#E1CEB9",
+    "disabled_bg": "#F1EBE3",
+    "disabled_fg": "#B8AA9A",
+}
+
+STYLE = Template("""
+QMainWindow, QWidget#central { background: $bg; }
+QWidget { color: $text; }
+QLabel { background: transparent; }
+
+QMenuBar { background: $surface; border-bottom: 1px solid $border; padding: 4px 8px; }
+QMenuBar::item { padding: 4px 14px; background: transparent; border-radius: 4px; }
+QMenuBar::item:selected { background: $accent_soft; }
+QMenu { background: $surface; border: 1px solid $border; padding: 4px; }
+QMenu::item { padding: 6px 24px; border-radius: 4px; }
+QMenu::item:selected { background: $accent_soft; color: $accent_dark; }
+QMenu::item:disabled { color: $disabled_fg; }
+QMenu::separator { height: 1px; background: $border; margin: 4px 8px; }
+
+QToolButton {
+    background: $accent_soft; border: 1px solid $accent; border-radius: 6px;
+    padding: 6px 16px; color: $accent_dark;
+}
+QToolButton:hover { background: $accent_hover; }
+QToolButton:pressed { background: $accent; color: $surface; }
+QToolButton:disabled { background: $disabled_bg; border-color: $border; color: $disabled_fg; }
+
+QFrame#panel { background: $surface; border: 1px solid $border; border-radius: 4px; }
+QFrame#panelHead { background: $surface_alt; border: none; border-bottom: 1px solid $border; }
+QFrame#field { background: $surface_alt; border: 1px solid $border; border-radius: 4px; }
+QLabel#fieldLabel { color: $muted; font-size: 9pt; }
+QLabel#muted { color: $muted; }
+QLabel#accent { color: $accent; }
+
+QTabWidget::pane { border: 1px solid $border; background: $surface; top: -1px; }
+QTabBar::tab {
+    padding: 7px 20px; background: $surface_alt; color: $muted;
+    border: 1px solid $border; border-bottom: none; margin-right: 2px;
+}
+QTabBar::tab:selected { background: $surface; color: $text; border-bottom: 2px solid $accent; }
+QTabBar::tab:hover:!selected { color: $accent; }
+
+QPlainTextEdit, QTableWidget {
+    border: none; background: $surface;
+    selection-background-color: $accent_soft; selection-color: $text;
+}
+QHeaderView::section {
+    background: $surface; color: $muted; border: none;
+    border-bottom: 1px solid $border; padding: 4px 6px;
+}
+QPushButton {
+    border: 1px solid $border; border-radius: 4px; padding: 3px 12px;
+    background: $surface; color: $text;
+}
+QPushButton:hover { border-color: $accent; color: $accent; }
+
+QStatusBar { background: $surface; border-top: 1px solid $border; }
+QStatusBar QLabel { color: $muted; }
+
+QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 0; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: $border; border-radius: 5px; min-height: 24px; min-width: 24px;
+}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover { background: $muted; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+""").substitute(C)
 
 
-class MainWindow(QMainWindow):
+def mono(size=10):
+    font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+    font.setPointSize(size)
+    return font
+
+
+def panel(title, body, extra=None):
+    """A bordered box with a small header row."""
+    box = QFrame()
+    box.setObjectName("panel")
+    lay = QVBoxLayout(box)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
+
+    head = QFrame()
+    head.setObjectName("panelHead")
+    row = QHBoxLayout(head)
+    row.setContentsMargins(12, 8, 12, 8)
+    row.addWidget(QLabel(title))
+    row.addStretch()
+
+    if extra is not None:
+        row.addWidget(extra)
+
+    lay.addWidget(head)
+    lay.addWidget(body, 1)
+    return box
+
+
+class LineNumberArea(QWidget):
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+
+    def sizeHint(self):
+        return QSize(self.editor.number_width(), 0)
+
+    def paintEvent(self, event):
+        self.editor.paint_numbers(event)
+
+
+class CodeEditor(QPlainTextEdit):
+    """Plain text editor with line numbers and current-line highlight."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFont(mono(11))
+        self.area = LineNumberArea(self)
+        self.blockCountChanged.connect(self.update_margin)
+        self.updateRequest.connect(self.update_area)
+        self.cursorPositionChanged.connect(self.highlight_line)
+        self.update_margin()
+        self.highlight_line()
+
+    def number_width(self):
+        digits = max(2, len(str(max(1, self.blockCount()))))
+        return 24 + self.fontMetrics().horizontalAdvance("9") * digits
+
+    def update_margin(self):
+        self.setViewportMargins(self.number_width(), 0, 0, 0)
+
+    def update_area(self, rect, dy):
+        if dy:
+            self.area.scroll(0, dy)
+        else:
+            self.area.update(0, rect.y(), self.area.width(), rect.height())
+
+        if rect.contains(self.viewport().rect()):
+            self.update_margin()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        cr = self.contentsRect()
+        self.area.setGeometry(
+            QRect(cr.left(), cr.top(), self.number_width(), cr.height())
+        )
+
+    def paint_numbers(self, event):
+        painter = QPainter(self.area)
+        painter.fillRect(event.rect(), QColor(C["surface_alt"]))
+
+        block = self.firstVisibleBlock()
+        number = block.blockNumber()
+        top = round(
+            self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+        )
+        bottom = top + round(self.blockBoundingRect(block).height())
+        current = self.textCursor().blockNumber()
+        height = self.fontMetrics().height()
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                painter.setPen(
+                    QColor(
+                        C["accent_dark"] if number == current else C["muted"]
+                    )
+                )
+                painter.drawText(
+                    0,
+                    top,
+                    self.area.width() - 8,
+                    height,
+                    Qt.AlignmentFlag.AlignRight,
+                    str(number + 1),
+                )
+
+            block = block.next()
+            top = bottom
+            bottom = top + round(self.blockBoundingRect(block).height())
+            number += 1
+
+    def highlight_line(self):
+        selection = QTextEdit.ExtraSelection()
+        selection.format.setBackground(QColor("#EADCCB"))
+        selection.format.setProperty(
+            QTextFormat.Property.FullWidthSelection, True
+        )
+        selection.cursor = self.textCursor()
+        selection.cursor.clearSelection()
+        self.setExtraSelections([selection])
+
+    def goto_line(self, line):
+        block = self.document().findBlockByNumber(line - 1)
+        if block.isValid():
+            self.setTextCursor(QTextCursor(block))
+            self.centerCursor()
+
+
+class Field(QFrame):
+    """One labelled box of the instruction word."""
+
+    def __init__(self, label):
+        super().__init__()
+        self.setObjectName("field")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 6, 10, 8)
+        lay.setSpacing(2)
+
+        self.label = QLabel(label)
+        self.label.setObjectName("fieldLabel")
+
+        self.value = QLabel("-")
+        self.value.setFont(mono(12))
+
+        lay.addWidget(self.label)
+        lay.addWidget(self.value)
+
+    def set(self, label, value):
+        self.label.setText(label)
+        self.value.setText(value)
+
+
+class RegisterTable(QTableWidget):
+    """32 registers displayed vertically in one name/hex pair."""
+
+    def __init__(self):
+        all_regs = LEFT_REGS + RIGHT_REGS
+        super().__init__(len(all_regs), 2)
+
+        self.setHorizontalHeaderLabels(["Register", "Hex"])
+        self.verticalHeader().setVisible(False)
+        self.verticalHeader().setDefaultSectionSize(24)
+
+        self.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+
+        self.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.setSelectionMode(
+            QAbstractItemView.SelectionMode.NoSelection
+        )
+        self.setShowGrid(False)
+        self.setFont(mono(10))
+
+        self._cells = {}
+
+        for row, name in enumerate(all_regs):
+            self._cells[name] = row
+
+            self.setItem(row, 0, QTableWidgetItem(name))
+            self.setItem(
+                row, 1, QTableWidgetItem("0x00000000")
+            )
+
+    def update_values(self, snapshot, changed=None):
+        for name, row in self._cells.items():
+            self.item(row, 1).setText(
+                f"0x{snapshot[name]:08x}"
+            )
+
+            color = (
+                QColor(C["accent_soft"])
+                if name == changed
+                else QColor(C["surface"])
+            )
+
+            self.item(row, 0).setBackground(color)
+            self.item(row, 1).setBackground(color)
+
+
+class MothWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("MIPS Assembler and Debugger")
-        self.resize(1100, 780)
+        self.resize(1280, 860)
 
-        self.step_index = 0
+        self.machine = None
+        self.state = "idle"
 
-        self.setStyleSheet("""
-            QMainWindow, QWidget#centralWidget {
-                background-color: #241817;
-                color: #F2E6DC;
-                font-family: Segoe UI;
-            }
+        # Timer makes Run visibly move through instructions.
+        self.run_timer = QTimer(self)
+        self.run_timer.setInterval(350)
+        self.run_timer.timeout.connect(self._run_tick)
 
-            QFrame#panel {
-                background-color: #49302D;
-                border: 1px solid #704A45;
-                border-radius: 14px;
-            }
+        self._build_actions()
+        self._build_ui()
+        self._build_menu()
+        self.setStyleSheet(STYLE)
 
-            QLabel {
-                color: #F2E6DC;
-            }
+        self.registers.update_values(FakeMachine().snapshot())
+        self.refresh_status()
 
-            QLabel#panelTitle {
-                color: #E5A9AE;
-                font-size: 15px;
-                font-weight: bold;
-                padding-bottom: 5px;
-            }
+    # ---------------------------------------------------------------- build
 
-            QLabel#infoTitle {
-                color: #D7B8AD;
-                font-size: 12px;
-            }
+    def _action(self, text, slot, shortcut=None, enabled=True):
+        action = QAction(text, self)
+        action.triggered.connect(lambda _checked=False: slot())
 
-            QLabel#infoValue {
-                color: #FFFFFF;
-                font-size: 15px;
-                font-weight: bold;
-            }
+        if shortcut:
+            action.setShortcut(QKeySequence(shortcut))
 
-            QTextEdit {
-                background-color: #302220;
-                color: #F2E6DC;
-                border: 1px solid #704A45;
-                border-radius: 8px;
-                padding: 10px;
-                font-family: Consolas;
-                font-size: 14px;
-            }
+        action.setEnabled(enabled)
+        return action
 
-            QTableWidget {
-                background-color: #302220;
-                color: #F2E6DC;
-                border: 1px solid #704A45;
-                border-radius: 8px;
-                gridline-color: #704A45;
-                font-family: Consolas;
-                font-size: 13px;
-            }
+    def _build_actions(self):
+        self.act_open = self._action("Open", self.open_file, "Ctrl+O")
+        self.act_assemble = self._action("Assemble", self.assemble, "F7")
+        self.act_run = self._action("Run", self.run, "F5", enabled=False)
+        self.act_step = self._action("Step", self.step, "F10", enabled=False)
+        self.act_reset = self._action(
+            "Reset", self.reset, "Shift+F5", enabled=False
+        )
 
-            QHeaderView::section {
-                background-color: #702D3B;
-                color: #FFFFFF;
-                padding: 8px;
-                border: none;
-                font-weight: bold;
-            }
+    def _build_menu(self):
+        bar = self.menuBar()
 
-            QTableWidget::item {
-                padding: 6px;
-            }
+        file_menu = bar.addMenu("&File")
+        file_menu.addAction(self.act_open)
+        file_menu.addSeparator()
+        file_menu.addAction(self._action("Exit", self.close))
 
-            QPushButton#navigationButton {
-                background-color: #702D3B;
-                color: #FFF2EB;
-                border: 1px solid #96505B;
-                border-radius: 22px;
-                padding: 9px 22px;
-                font-size: 13px;
-                font-weight: bold;
-                min-width: 110px;
-                min-height: 24px;
-            }
+        edit_menu = bar.addMenu("&Edit")
+        edit_menu.addAction(self._action("Undo", self.editor.undo))
+        edit_menu.addAction(self._action("Redo", self.editor.redo))
+        edit_menu.addSeparator()
+        edit_menu.addAction(self._action("Cut", self.editor.cut))
+        edit_menu.addAction(self._action("Copy", self.editor.copy))
+        edit_menu.addAction(self._action("Paste", self.editor.paste))
 
-            QPushButton#navigationButton:hover {
-                background-color: #914653;
-                border: 1px solid #C77B86;
-            }
+        view_menu = bar.addMenu("&View")
+        view_menu.addAction(
+            self._action("Clear terminal", self.terminal.clear)
+        )
 
-            QPushButton#navigationButton:pressed {
-                background-color: #E5A9AE;
-                color: #241817;
-                border: 1px solid #E5A9AE;
-            }
+        sim_menu = bar.addMenu("&Simulator")
+        for act in (
+            self.act_assemble,
+            self.act_run,
+            self.act_step,
+            self.act_reset,
+        ):
+            sim_menu.addAction(act)
 
-            QPushButton#navigationButton:disabled {
-                background-color: #49302D;
-                color: #907B74;
-                border: 1px solid #60413C;
-            }
-        """)
+        help_menu = bar.addMenu("&Help")
+        help_menu.addAction(self._action("About", self.about))
 
-        self.create_ui()
-        self.update_ui()
-
-    def create_panel(self, title):
-        panel = QFrame()
-        panel.setObjectName("panel")
-
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(16, 14, 16, 16)
-        layout.setSpacing(10)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("panelTitle")
-        layout.addWidget(title_label)
-
-        return panel, layout
-
-    def create_info_item(self, title):
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("infoTitle")
-
-        value_label = QLabel("--")
-        value_label.setObjectName("infoValue")
-        value_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-
-        layout.addWidget(title_label)
-        layout.addWidget(value_label)
-
-        return container, value_label
-
-    def create_ui(self):
+    def _build_ui(self):
         central = QWidget()
-        central.setObjectName("centralWidget")
+        central.setObjectName("central")
         self.setCentralWidget(central)
 
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(22, 18, 22, 18)
-        main_layout.setSpacing(14)
+        root = QVBoxLayout(central)
+        root.setContentsMargins(12, 8, 12, 8)
+        root.setSpacing(10)
 
-        # Header
-        header_layout = QHBoxLayout()
+        # Toolbar.
+        toolbar = QHBoxLayout()
 
-        app_title = QLabel("MIPS Studio")
-        app_title.setStyleSheet("""
-            font-size: 25px;
-            font-weight: bold;
-            color: #E5A9AE;
-        """)
+        for act in (
+            self.act_open,
+            self.act_assemble,
+            self.act_run,
+            self.act_step,
+            self.act_reset,
+        ):
+            button = QToolButton()
+            button.setDefaultAction(act)
+            button.setMinimumSize(64, 34)
+            toolbar.addWidget(button)
 
-        subtitle = QLabel("Assembler & Debugger")
-        subtitle.setStyleSheet("""
-            font-size: 13px;
-            color: #D7B8AD;
-        """)
+        toolbar.addStretch()
+        root.addLayout(toolbar)
 
-        title_layout = QVBoxLayout()
-        title_layout.setSpacing(2)
-        title_layout.addWidget(app_title)
-        title_layout.addWidget(subtitle)
+        # Editor and Execute tabs.
+        self.editor = CodeEditor()
+        self.editor.setPlainText(SOURCE)
 
-        self.step_counter = QLabel("Step 1")
-        self.step_counter.setStyleSheet("""
-            color: #E5A9AE;
-            font-size: 14px;
-            font-weight: bold;
-        """)
+        self.execute_view = QPlainTextEdit()
+        self.execute_view.setReadOnly(True)
+        self.execute_view.setFont(mono(10))
 
-        header_layout.addLayout(title_layout)
-        header_layout.addStretch()
-        header_layout.addWidget(self.step_counter)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.editor, "Edit")
+        self.tabs.addTab(self.execute_view, "Execute")
 
-        main_layout.addLayout(header_layout)
+        left = QVBoxLayout()
+        left.addWidget(self.tabs, 1)
+        left.addWidget(self._build_word_panel())
 
-        # Upper row: Source and Register
-        upper_layout = QHBoxLayout()
-        upper_layout.setSpacing(14)
+        # Registers only; Current Instruction panel removed.
+        self.registers = RegisterTable()
 
-        # Source panel
-        source_panel, source_layout = self.create_panel("Source Code")
+        right = QVBoxLayout()
+        right.addWidget(panel("Registers", self.registers), 1)
 
-        self.source = QTextEdit()
-        self.source.setReadOnly(True)
-        self.source.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.source.setPlainText("\n".join(PROGRAM))
+        columns = QHBoxLayout()
+        columns.setSpacing(16)
+        columns.addLayout(left, 3)
+        columns.addLayout(right, 2)
 
-        source_layout.addWidget(self.source)
-        upper_layout.addWidget(source_panel, 55)
+        root.addLayout(columns, 1)
+        root.addWidget(self._build_terminal_panel())
 
-        # Register panel
-        register_panel, register_layout = self.create_panel("Register Update")
+        self.status = QLabel()
+        self.status.setFont(mono(9))
+        self.statusBar().addWidget(self.status)
 
-        self.register_name = QLabel("$t0")
-        self.register_label = self.register_name
+    def _build_word_panel(self):
+        body = QWidget()
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(12, 12, 12, 12)
 
-        self.register_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.register_name.setStyleSheet("""
-            color: #E5A9AE;
-            font-size: 27px;
-            font-weight: bold;
-            padding: 10px;
-        """)
+        row = QHBoxLayout()
+        self.fields = [
+            Field(n)
+            for n in ("opcode", "rs", "rt", "rd", "shamt", "funct")
+        ]
 
-        register_layout.addWidget(self.register_name)
+        for field in self.fields:
+            row.addWidget(field)
 
-        previous_container, self.previous_value = self.create_info_item("Previous Value")
-        new_container, self.new_value = self.create_info_item("New Value")
+        lay.addLayout(row)
 
-        self.previous_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.new_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info = QHBoxLayout()
 
-        self.previous_value.setStyleSheet("""
-            font-size: 21px;
-            color: #D7B8AD;
-            padding: 8px;
-        """)
+        self.word_hex = QLabel("0x00000000")
+        self.word_hex.setFont(mono(12))
 
-        self.new_value.setStyleSheet("""
-            font-size: 21px;
-            color: #E5A9AE;
-            padding: 8px;
-        """)
+        self.type_label = QLabel("R-Type")
+        self.type_label.setObjectName("accent")
+        self.type_label.setFont(mono(10))
 
-        register_layout.addWidget(previous_container)
-        register_layout.addWidget(new_container)
-        register_layout.addStretch()
+        self.word_text = QLabel("")
+        self.word_text.setObjectName("accent")
+        self.word_text.setFont(mono(10))
 
-        upper_layout.addWidget(register_panel, 45)
-        main_layout.addLayout(upper_layout, 3)
+        info.addWidget(self.word_hex)
+        info.addWidget(self.type_label)
+        info.addSpacing(20)
+        info.addWidget(self.word_text)
+        info.addStretch()
 
-        # Instruction Details panel
-        instruction_panel, instruction_layout = self.create_panel("Instruction Details")
+        lay.addLayout(info)
 
-        info_layout = QHBoxLayout()
-        info_layout.setSpacing(30)
+        bits = QLabel("32 bits")
+        bits.setObjectName("muted")
 
-        address_container, self.address_label = self.create_info_item("Address")
-        word_container, self.word_label = self.create_info_item("Machine Word")
-        pc_container, self.pc_label = self.create_info_item("Next PC")
+        return panel("Instruction word", body, bits)
 
-        info_layout.addWidget(address_container)
-        info_layout.addWidget(word_container)
-        info_layout.addWidget(pc_container)
+    def _build_terminal_panel(self):
+        self.terminal = QPlainTextEdit()
+        self.terminal.setReadOnly(True)
+        self.terminal.setFont(mono(10))
+        self.terminal.setMinimumHeight(100)
 
-        instruction_layout.addLayout(info_layout)
+        clear = QPushButton("Clear")
+        clear.clicked.connect(self.terminal.clear)
 
-        self.bit_table = QTableWidget()
-        self.bit_table.setColumnCount(2)
-        self.bit_table.setHorizontalHeaderLabels(["Field", "Binary Value"])
-        self.bit_table.setRowCount(6)
-        self.bit_table.horizontalHeader().setStretchLastSection(True)
-        self.bit_table.verticalHeader().setVisible(False)
-        self.bit_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.bit_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        box = panel("Messages / Terminal", self.terminal, clear)
+        box.setMaximumHeight(200)
 
-        instruction_layout.addWidget(self.bit_table)
-        main_layout.addWidget(instruction_panel, 4)
+        return box
 
-        # Navigation buttons
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        buttons_layout.setSpacing(22)
+    # ------------------------------------------------------------- helpers
 
-        self.previous_button = QPushButton("Previous")
-        self.previous_button.setObjectName("navigationButton")
-        self.previous_button.clicked.connect(self.previous_step)
-
-        self.next_button = QPushButton("Next")
-        self.next_button.setObjectName("navigationButton")
-        self.next_button.clicked.connect(self.next_step)
-
-        buttons_layout.addWidget(self.previous_button)
-        buttons_layout.addWidget(self.next_button)
-
-        main_layout.addLayout(buttons_layout)
-
-    def highlight_current_line(self, line_number):
-        selections = []
-
-        cursor = QTextCursor(self.source.document())
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-
-        for _ in range(line_number):
-            if not cursor.movePosition(QTextCursor.MoveOperation.Down):
-                break
-
-        selection = QTextEdit.ExtraSelection()
-        selection.format.setBackground(QColor("#70434A"))
-        selection.format.setForeground(QColor("#FFFFFF"))
-        selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
-
-        selection.cursor = cursor
-        selection.cursor.select(QTextCursor.SelectionType.LineUnderCursor)
-
-        selections.append(selection)
-        self.source.setExtraSelections(selections)
-
-    def update_ui(self):
-        snapshot = SNAPSHOTS[self.step_index]
-
-        # Step counter
-        self.step_counter.setText(f"Step {self.step_index + 1} / {len(SNAPSHOTS)}")
-
-        # Highlight current source line
-        self.highlight_current_line(snapshot.line)
-
-        # Instruction information
-        self.address_label.setText(f"0x{snapshot.address:08X}")
-        self.word_label.setText(f"0x{snapshot.word:08X}")
-        self.pc_label.setText(f"0x{snapshot.pc:08X}")
-
-        # Determine instruction type from opcode
-        opcode = (snapshot.word >> 26) & 0x3F
-        instruction_type = "R" if opcode == 0 else "I"
-
-        fields = get_fields(snapshot.word, instruction_type)
-
-        self.bit_table.setRowCount(len(fields))
-
-        for row, (field_name, field_value) in enumerate(fields):
-            self.bit_table.setItem(row, 0, QTableWidgetItem(str(field_name)))
-            self.bit_table.setItem(row, 1, QTableWidgetItem(str(field_value)))
-
-        self.bit_table.resizeColumnsToContents()
-
-        # Register update
-        if snapshot.reg_written is not None:
-            register_names = {
-                8: "$t0",
-                9: "$t1",
-            }
-
-            register_name = register_names.get(snapshot.reg_written, f"$r{snapshot.reg_written}")
-
-            self.register_name.setText(register_name)
-
-            self.previous_value.setText(f"0x{snapshot.previous:08X}")
-            self.new_value.setText(f"0x{snapshot.value:08X}")
+    def log(self, text, accent=False):
+        if accent:
+            self.terminal.appendHtml(
+                f'<span style="color:{C["accent"]}">'
+                f'{html.escape(text)}</span>'
+            )
         else:
-            self.register_name.setText("No Register")
-            self.previous_value.setText("--")
-            self.new_value.setText("--")
+            self.terminal.appendPlainText(text)
 
-        # Navigation buttons
-        self.previous_button.setEnabled(self.step_index > 0)
-        self.next_button.setEnabled(self.step_index < len(SNAPSHOTS) - 1)
+    def refresh_status(self):
+        pc = self.machine.pc if self.machine else TEXT_BASE
+        steps = self.machine.steps if self.machine else 0
 
-    def next_step(self):
-        if self.step_index < len(SNAPSHOTS) - 1:
-            self.step_index += 1
-            self.update_ui()
+        self.status.setText(
+            f"PC 0x{pc:08x}      instruction {steps}      "
+            f"errors 0      {self.state}"
+        )
 
-    def previous_step(self):
-        if self.step_index > 0:
-            self.step_index -= 1
-            self.update_ui()
+    def show_word(self, word, text):
+        opcode = (word >> 26) & 0x3F
+        rs = (word >> 21) & 0x1F
+        rt = (word >> 16) & 0x1F
+
+        if opcode == 0:
+            # R-Type
+            instruction_type = "R-Type"
+
+            parts = [
+                ("opcode", opcode, 6),
+                ("rs", rs, 5),
+                ("rt", rt, 5),
+                ("rd", (word >> 11) & 0x1F, 5),
+                ("shamt", (word >> 6) & 0x1F, 5),
+                ("funct", word & 0x3F, 6),
+            ]
+
+        elif opcode in (2, 3):
+            # J-Type
+            instruction_type = "J-Type"
+
+            parts = [
+                ("opcode", opcode, 6),
+                ("address", word & 0x03FFFFFF, 26),
+            ]
+
+        else:
+            # I-Type
+            instruction_type = "I-Type"
+
+            parts = [
+                ("opcode", opcode, 6),
+                ("rs", rs, 5),
+                ("rt", rt, 5),
+                ("immediate", word & 0xFFFF, 16),
+            ]
+
+        self.type_label.setText(instruction_type)
+
+        for i, field in enumerate(self.fields):
+            if i < len(parts):
+                name, value, width = parts[i]
+                field.set(name, format(value, f"0{width}b"))
+                field.setVisible(True)
+            else:
+                field.setVisible(False)
+
+        self.word_hex.setText(f"0x{word:08x}")
+        self.word_text.setText(text)
+
+    def show_result(self, res):
+        self.show_word(res.word, res.text)
+        self.registers.update_values(
+            self.machine.snapshot(), res.reg
+        )
+
+        self.editor.goto_line(res.line)
+
+    def show_next_instruction(self):
+        """Highlight the next instruction based on the machine PC."""
+        if self.machine is None or self.machine.halted:
+            return
+
+        index = (self.machine.pc - (TEXT_BASE + 8)) // 4
+
+        if 0 <= index < len(PROGRAM):
+            line, text, word = PROGRAM[index]
+            self.editor.goto_line(line)
+            self.show_word(word, text)
+
+    # --------------------------------------------------------------- slots
+
+    def open_file(self):
+        self.stop_run()
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open assembly",
+            "",
+            "Assembly (*.asm *.s);;All files (*)",
+        )
+
+        if path:
+            with open(path, encoding="utf-8") as fh:
+                self.editor.setPlainText(fh.read())
+
+            self.log(f"opened {path}")
+
+    def assemble(self):
+        self.stop_run()
+
+        # TODO: replace with the real assembler once it exists.
+        self.machine = FakeMachine()
+
+        self.execute_view.setPlainText(
+            "\n".join(
+                f"0x{TEXT_BASE + 8 + 4 * i:08x}  "
+                f"0x{word:08x}  {text}"
+                for i, (_line, text, word) in enumerate(PROGRAM)
+            )
+        )
+
+        for act in (
+            self.act_run,
+            self.act_step,
+            self.act_reset,
+        ):
+            act.setEnabled(True)
+
+        self.registers.update_values(self.machine.snapshot())
+
+        first_line, first_text, first_word = PROGRAM[0]
+        self.editor.goto_line(first_line)
+        self.show_word(first_word, first_text)
+
+        self.state = "ready"
+        self.log(
+            f"assembled {len(PROGRAM)} instructions, 0 errors"
+        )
+        self.refresh_status()
+
+    def step(self):
+        if self.machine is None or self.machine.halted:
+            return
+
+        self.stop_run()
+        self._execute_one_step()
+
+    def _execute_one_step(self):
+        if self.machine is None or self.machine.halted:
+            self.stop_run()
+            return
+
+        res = self.machine.step()
+
+        if res is None:
+            self.stop_run()
+            return
+
+        self.show_result(res)
+
+        if res.halted:
+            self.stop_run()
+            self.log("done", accent=True)
+            self.act_run.setEnabled(False)
+            self.act_step.setEnabled(False)
+            self.state = "halted"
+        else:
+            self.show_next_instruction()
+            self.state = "running" if self.run_timer.isActive() else "paused"
+
+        self.refresh_status()
+
+    def run(self):
+        if self.machine is None or self.machine.halted:
+            return
+
+        if not self.run_timer.isActive():
+            self.state = "running"
+            self.run_timer.start()
+            self.refresh_status()
+
+    def _run_tick(self):
+        """Execute one instruction each timer interval."""
+        if self.machine is None or self.machine.halted:
+            self.stop_run()
+            return
+
+        self._execute_one_step()
+
+    def stop_run(self):
+        if self.run_timer.isActive():
+            self.run_timer.stop()
+
+    def reset(self):
+        self.stop_run()
+
+        self.machine = FakeMachine()
+
+        self.act_run.setEnabled(True)
+        self.act_step.setEnabled(True)
+
+        self.registers.update_values(self.machine.snapshot())
+
+        first_line, first_text, first_word = PROGRAM[0]
+        self.editor.goto_line(first_line)
+        self.show_word(first_word, first_text)
+
+        self.state = "ready"
+        self.log("reset")
+        self.refresh_status()
+
+    def about(self):
+        QMessageBox.about(
+            self,
+            "About",
+            "MIPS Assembler and Debugger",
+        )
