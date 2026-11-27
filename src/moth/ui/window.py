@@ -253,9 +253,11 @@ class Field(QFrame):
 
         self.label = QLabel(label)
         self.label.setObjectName("fieldLabel")
+        self.label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self.value = QLabel("-")
         self.value.setFont(mono(12))
+        self.value.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         lay.addWidget(self.label)
         lay.addWidget(self.value)
@@ -273,6 +275,7 @@ class RegisterTable(QTableWidget):
         super().__init__(len(all_regs), 2)
 
         self.setHorizontalHeaderLabels(["Register", "Hex"])
+        self.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(24)
 
@@ -289,8 +292,10 @@ class RegisterTable(QTableWidget):
         for row, name in enumerate(all_regs):
             self._cells[name] = row
 
-            self.setItem(row, 0, QTableWidgetItem(name))
-            self.setItem(row, 1, QTableWidgetItem("0x00000000"))
+            for col, value in enumerate((name, "0x00000000")):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+                self.setItem(row, col, item)
 
     def update_values(self, snapshot, changed=None):
         for name, row in self._cells.items():
