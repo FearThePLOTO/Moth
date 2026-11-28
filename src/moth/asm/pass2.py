@@ -85,12 +85,15 @@ def encode(mnemonic: str, operands: str, address: int, program: Program, line: i
         if mnemonic in PAIR_R:
             return r_type(0, register(ops[0], line), register(ops[1], line), 0, 0, row.funct)
         if mnemonic in SHIFTS:
+            shamt = parse_integer(ops[2])
+            if not 0 <= shamt <= 31:
+                raise ValueError(f"shift amount {shamt} must be between 0 and 31")
             return r_type(
                 0,
                 0,
                 register(ops[1], line),
                 register(ops[0], line),
-                parse_integer(ops[2]) & 0x1F,
+                shamt,
                 row.funct,
             )
         if mnemonic in THREE_R:

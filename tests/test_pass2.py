@@ -50,6 +50,22 @@ def test_jump_out_of_region_reports_error():
         encode("j", "far", 0x00400000, program, 1)
 
 
+def test_mnemonics_and_registers_are_case_insensitive():
+    program = assemble(".text\nADD $t0, $T1, $t2\nLI $t0, 5\nNOP\n")
+    assert program.errors == []
+    assert [instruction.word for instruction in program.instructions] == [
+        0x012A4020,
+        0x24080005,
+        0x00000000,
+    ]
+
+
+def test_shift_amount_out_of_range_is_an_error():
+    program = assemble(".text\nsll $t0, $t1, 32\n")
+    assert len(program.errors) == 1
+    assert "shift amount 32" in program.errors[0].message
+
+
 def test_every_supported_mars_rule_has_matching_word_count():
     rules = Path(__file__).parents[1] / "src" / "moth" / "asm" / "PseudoOps.txt"
     checked = 0

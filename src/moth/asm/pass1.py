@@ -64,7 +64,7 @@ def split_operands(operands: str) -> list[str]:
 def parse_integer(value: str) -> int:
     """Parse a decimal, hexadecimal, or binary integer. Leading zeros mean decimal."""
     text = value.strip()
-    if re.fullmatch(r"0[0-9]+", text):
+    if re.fullmatch(r"[+-]?0[0-9]+", text):
         return int(text, 10)
     return int(text, 0)
 

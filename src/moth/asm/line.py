@@ -64,7 +64,7 @@ def extract_instruction(code: str) -> tuple[str | None, str]:
 
     parts = code.split(maxsplit=1)
 
-    mnemonic = parts[0]
+    mnemonic = parts[0].lower()
     operands = parts[1] if len(parts) > 1 else ""
 
     return mnemonic, operands

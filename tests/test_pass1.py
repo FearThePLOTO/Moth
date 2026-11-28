@@ -55,7 +55,8 @@ def test_word_count_matches_pseudo_table():
 
 
 def test_leading_zeros_are_decimal():
-    program = pass1(parse_lines(".data\nv: .word 08, 010\n"))
+    program = pass1(parse_lines(".data\nv: .word 08, 010, -08\n"))
     assert program.errors == []
     assert program.data[0x10010000] == 8
     assert program.data[0x10010004] == 10
+    assert program.data[0x10010008] == 248
