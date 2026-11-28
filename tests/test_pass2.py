@@ -66,6 +66,53 @@ def test_shift_amount_out_of_range_is_an_error():
     assert "shift amount 32" in program.errors[0].message
 
 
+def test_mfhi_and_mflo_use_rd():
+    program = assemble(".text\nmfhi $t0\nmflo $t1\n")
+    assert program.errors == []
+    assert [instruction.word for instruction in program.instructions] == [
+        0x00004010,
+        0x00004812,
+    ]
+
+
+def test_signed_hex_immediates_match_mars():
+    program = assemble(".text\naddi $t0, $t1, 0xFFFFFFFF\nlw $t0, 0xFFFFFFFF($s0)\n")
+    assert program.errors == []
+    assert [instruction.word for instruction in program.instructions] == [
+        0x2128FFFF,
+        0x8E08FFFF,
+    ]
+
+
+def test_leading_zero_and_character_immediates():
+    program = assemble(".text\nli $t0, 08\nli $t1, 'a'\n")
+    assert program.errors == []
+    assert [instruction.word for instruction in program.instructions] == [
+        0x24080008,
+        0x24090061,
+    ]
+
+
+def test_character_literals_with_commas_and_parentheses():
+    program = assemble(
+        ".text\nli $t0, ','\nli $t1, '('\nli $t2, ')'\nslti $t3, $t4, ','\nlui $t5, ','\n"
+    )
+    assert program.errors == []
+    assert [instruction.word for instruction in program.instructions] == [
+        0x2408002C,
+        0x24090028,
+        0x240A0029,
+        0x298B002C,
+        0x3C0D002C,
+    ]
+
+
+def test_lui_negative_is_an_error():
+    program = assemble(".text\nlui $t0, -1\n")
+    assert len(program.errors) == 1
+    assert "does not fit in 16 bits" in program.errors[0].message
+
+
 def test_every_supported_mars_rule_has_matching_word_count():
     rules = Path(__file__).parents[1] / "src" / "moth" / "asm" / "PseudoOps.txt"
     checked = 0

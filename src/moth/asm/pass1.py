@@ -29,7 +29,7 @@ def split_operands(operands: str) -> list[str]:
     """Split comma-separated operands while respecting quoted strings."""
     result = []
     current = []
-    in_quotes = False
+    quote = None
     escaped = False
 
     for char in operands:
@@ -38,17 +38,22 @@ def split_operands(operands: str) -> list[str]:
             escaped = False
             continue
 
-        if char == "\\" and in_quotes:
+        if quote is not None:
+            if char == "\\":
+                current.append(char)
+                escaped = True
+                continue
+            if char == quote:
+                quote = None
             current.append(char)
-            escaped = True
             continue
 
-        if char == '"':
-            in_quotes = not in_quotes
+        if char in "\"'":
+            quote = char
             current.append(char)
             continue
 
-        if char == "," and not in_quotes:
+        if char == ",":
             result.append("".join(current).strip())
             current = []
         else:
@@ -62,9 +67,16 @@ def split_operands(operands: str) -> list[str]:
 
 
 def parse_integer(value: str) -> int:
-    """Parse a decimal, hexadecimal, or binary integer. Leading zeros mean decimal."""
+    """Parse a decimal, hexadecimal, binary or character literal. Leading zeros mean decimal."""
     text = value.strip()
-    if re.fullmatch(r"[+-]?0[0-9]+", text):
+    if len(text) >= 3 and text[0] == "'" and text[-1] == "'":
+        try:
+            char = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            char = None
+        if isinstance(char, str) and len(char) == 1:
+            return ord(char)
+    if re.fullmatch(r"0[0-9]+", text):
         return int(text, 10)
     return int(text, 0)
 
@@ -93,6 +105,7 @@ def process_word(
     data_address: int,
     data: dict[int, int],
     errors: list[Error],
+    fixups: list[tuple[int, str, int]],
 ) -> int:
     """Process .word and return the updated data address."""
 
@@ -106,7 +119,12 @@ def process_word(
         try:
             number = parse_integer(value)
         except ValueError:
-            add_error(errors, line, f"Invalid .word value: {value}")
+            if LABEL_PATTERN.fullmatch(value.strip()) is None:
+                add_error(errors, line, f"Invalid .word value: {value}")
+                continue
+            # Forward labels are not in symbols yet, so store the value later.
+            fixups.append((data_address, value.strip(), line.line_number))
+            data_address += 4
             continue
 
         if not -(2**31) <= number <= (2**32 - 1):
@@ -194,7 +212,8 @@ def process_asciiz(
         add_error(errors, line, "Invalid .asciiz string")
         return data_address
 
-    encoded = value.encode("utf-8") + b"\x00"
+    # MARS stores each character as one byte, so non-ASCII text keeps its low byte.
+    encoded = bytes(ord(char) & 0xFF for char in value) + b"\x00"
 
     for byte in encoded:
         data[data_address] = byte
@@ -234,6 +253,7 @@ def pass1(lines: list[Line]) -> Program:
     pending: list[str] = []
     seen: set[str] = set()
     auto_align = True
+    fixups: list[tuple[int, str, int]] = []
 
     def place_labels() -> None:
         address = text_address if current_section == "text" else data_address
@@ -297,27 +317,25 @@ def pass1(lines: list[Line]) -> Program:
                 )
                 continue
 
+            if current_section == "text":
+                add_error(errors, line, '".align" directive cannot appear in text segment')
+                continue
+
             # ".align 0" turns off automatic .word alignment, as in MARS.
             if exponent == 0:
                 auto_align = False
                 continue
 
-            if current_section == "text":
-                text_address = align_address(
-                    text_address,
-                    exponent,
-                )
-            else:
-                new_address = align_address(
-                    data_address,
-                    exponent,
-                )
+            new_address = align_address(
+                data_address,
+                exponent,
+            )
 
-                # Fill alignment padding with zeros
-                for address in range(data_address, new_address):
-                    data[address] = 0
+            # Fill alignment padding with zeros
+            for address in range(data_address, new_address):
+                data[address] = 0
 
-                data_address = new_address
+            data_address = new_address
 
             continue
 
@@ -347,6 +365,7 @@ def pass1(lines: list[Line]) -> Program:
                     data_address,
                     data,
                     errors,
+                    fixups,
                 )
 
             elif mnemonic == ".byte":
@@ -410,6 +429,20 @@ def pass1(lines: list[Line]) -> Program:
 
     # Labels at the end of the file
     place_labels()
+
+    # Resolve .word values that named a label.
+    for address, label, line_number in fixups:
+        value = symbols.get(label)
+        if value is None:
+            errors.append(
+                Error(
+                    line=line_number,
+                    column=1,
+                    message=f'undefined label "{label}"',
+                )
+            )
+            continue
+        store_bytes(data, address, value, 4)
 
     # Return the assembled program structure
     return Program(

@@ -1,3 +1,4 @@
+import ast
 import re
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from moth.registers import REGISTER_NAME_TO_NUMBER, REGISTER_NUMBER_TO_NAME
 
 _RULES_FILE = Path(__file__).with_name("PseudoOps.txt")
 _TOKEN_RE = re.compile(
+    r"'(?:\\.|[^'\\])+'|"
     r"\$[A-Za-z0-9_]+|"
     r"[+-]?(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|0[oO][0-7]+|\d[\d_]*)|"
     r"[A-Za-z_.$][A-Za-z0-9_.$]*|[()+-]"
@@ -40,12 +42,34 @@ _MEMORY_MNEMONICS = {
 
 
 def _split(operands, expected_count):
-    """split operands at commas preserving commas inside parentheses"""
+    """split operands at commas outside parentheses and quoted literals"""
     result = []
     current = []
     depth = 0
+    quote = None
+    escaped = False
 
     for character in operands:
+        if escaped:
+            current.append(character)
+            escaped = False
+            continue
+
+        if quote is not None:
+            if character == "\\":
+                current.append(character)
+                escaped = True
+                continue
+            if character == quote:
+                quote = None
+            current.append(character)
+            continue
+
+        if character in "\"'":
+            quote = character
+            current.append(character)
+            continue
+
         if character == "(":
             depth += 1
         elif character == ")":
@@ -73,12 +97,23 @@ def _split(operands, expected_count):
 
 def _imm(text):
     """read an int treating 32 bit hex values as signed like MARS"""
+    literal = text.strip()
+    if len(literal) >= 3 and literal[0] == "'" and literal[-1] == "'":
+        try:
+            char = ast.literal_eval(literal)
+        except (ValueError, SyntaxError):
+            char = None
+        if isinstance(char, str) and len(char) == 1:
+            return ord(char)
     try:
-        value = int(text, 0)
+        if re.fullmatch(r"0[0-9]+", literal):
+            value = int(literal, 10)
+        else:
+            value = int(text, 0)
     except ValueError as error:
         raise ValueError(f'"{text}" is not a number') from error
 
-    literal = text.strip().lower()
+    literal = literal.lower()
     if literal.startswith("+"):
         literal = literal[1:]
     if literal.startswith("0x") and 0 <= value <= 0xFFFFFFFF:
@@ -475,7 +510,7 @@ def expand(mnemonic, operands, symbols=None):
         if immediate < -(2**31) or immediate > (2**32) - 1:
             raise ValueError(f"immediate {immediate} does not fit in 32 bits")
 
-    actual_count = _operand_count_hint(mnemonic, operands)
+    actual_count = _operand_count_hint(operands)
     operands_list = _split(operands, actual_count)
     expected_counts = _expected_operand_counts(mnemonic)
 
@@ -506,18 +541,31 @@ def expand(mnemonic, operands, symbols=None):
     return _expand_templates(templates, source_tokens, symbols)
 
 
-def _operand_count_hint(mnemonic, operands):
+def _operand_count_hint(operands):
     """use the source rule samples to split ordinary comma separated inputs"""
-    rules = _RULES.get(mnemonic, [])
-    if not rules:
-        return len(operands.split(",")) if operands.strip() else 0
-
     # A top-level split is enough to count operands; commas inside memory
-    # addressing parentheses are ignored by _split.
+    # addressing parentheses or quoted literals are ignored by _split.
     count = 0
     depth = 0
     has_text = False
+    quote = None
+    escaped = False
     for character in operands:
+        if escaped:
+            escaped = False
+            has_text = True
+            continue
+        if quote is not None:
+            if character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            has_text = True
+            continue
+        if character in "\"'":
+            quote = character
+            has_text = True
+            continue
         if character == "(":
             depth += 1
         elif character == ")":
@@ -540,7 +588,7 @@ def word_count(mnemonic, operands, symbols=None):
             _split(operands, 0)
             return 1
 
-        actual_count = _operand_count_hint(mnemonic, operands)
+        actual_count = _operand_count_hint(operands)
         operand_list = _split(operands, actual_count)
         expected_counts = _expected_operand_counts(mnemonic)
         if expected_counts and actual_count not in expected_counts:

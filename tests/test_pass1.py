@@ -55,8 +55,48 @@ def test_word_count_matches_pseudo_table():
 
 
 def test_leading_zeros_are_decimal():
-    program = pass1(parse_lines(".data\nv: .word 08, 010, -08\n"))
+    program = pass1(parse_lines(".data\nv: .word 08, 010\n"))
     assert program.errors == []
     assert program.data[0x10010000] == 8
     assert program.data[0x10010004] == 10
-    assert program.data[0x10010008] == 248
+
+
+def test_signed_leading_zero_is_an_error():
+    program = pass1(parse_lines(".data\n.word -08\n"))
+    assert len(program.errors) == 1
+
+
+def test_word_accepts_labels():
+    program = pass1(parse_lines(".data\n.word later\nlater: .word 1\n"))
+    assert program.errors == []
+    assert program.data[0x10010000] == 0x04
+    assert program.data[0x10010001] == 0x00
+    assert program.data[0x10010002] == 0x01
+    assert program.data[0x10010003] == 0x10
+
+
+def test_word_undefined_label_is_an_error():
+    program = pass1(parse_lines(".data\n.word missing\n"))
+    assert len(program.errors) == 1
+    assert "undefined label" in program.errors[0].message
+
+
+def test_character_literals_in_data():
+    program = pass1(parse_lines(".data\n.byte 'a', ','\n.word 'A'\n"))
+    assert program.errors == []
+    assert program.data[0x10010000] == 0x61
+    assert program.data[0x10010001] == 0x2C
+    assert program.data[0x10010004] == 0x41
+
+
+def test_align_in_text_is_an_error():
+    program = pass1(parse_lines(".text\n.align 2\nnop\n"))
+    assert len(program.errors) == 1
+    assert ".align" in program.errors[0].message
+
+
+def test_asciiz_stores_one_byte_per_character():
+    program = pass1(parse_lines('.data\n.asciiz "é"\n'))
+    assert program.errors == []
+    assert program.data[0x10010000] == 0xE9
+    assert program.data[0x10010001] == 0

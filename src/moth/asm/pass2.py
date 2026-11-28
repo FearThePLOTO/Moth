@@ -7,11 +7,12 @@ from ..isa import BY_NAME
 from ..model import Error, Program
 from ..registers import REGISTER_NAME_TO_NUMBER
 from .pass1 import parse_integer, split_operands
-from .pseudo import expand
+from .pseudo import _imm, expand
 
 SHIFTS = {"sll", "srl", "sra"}
 PAIR_R = {"mult", "div"}
-ONE_R = {"jr", "mfhi", "mflo"}
+ONE_R = {"jr"}
+HILO_R = {"mfhi", "mflo"}
 THREE_R = {
     "add",
     "addu",
@@ -42,8 +43,8 @@ def register(token: str, line: int) -> int:
 
 
 def immediate(token: str, signed: bool, line: int) -> int:
-    value = parse_integer(token)
-    low, high = (-32768, 32767) if signed else (-32768, 65535)
+    value = _imm(token)
+    low, high = (-32768, 32767) if signed else (0, 65535)
     if not low <= value <= high:
         raise ValueError(f"immediate {value} does not fit in 16 bits")
     return value & 0xFFFF
@@ -59,7 +60,7 @@ def label_address(token: str, program: Program, line: int) -> int:
 def expected_operand_count(mnemonic: str) -> int:
     if mnemonic == "syscall":
         return 0
-    if mnemonic in ONE_R or mnemonic in {"j", "jal"}:
+    if mnemonic in ONE_R or mnemonic in HILO_R or mnemonic in {"j", "jal"}:
         return 1
     if mnemonic in PAIR_R or mnemonic in LOAD_STORE or mnemonic == "lui":
         return 2
@@ -79,17 +80,21 @@ def encode(mnemonic: str, operands: str, address: int, program: Program, line: i
 
     if row.fmt == "R":
         if mnemonic == "syscall":
-            return r_type(0, 0, 0, 0, 0, row.funct)
+            return r_type(row.opcode, 0, 0, 0, 0, row.funct)
         if mnemonic in ONE_R:
-            return r_type(0, register(ops[0], line), 0, 0, 0, row.funct)
+            return r_type(row.opcode, register(ops[0], line), 0, 0, 0, row.funct)
+        if mnemonic in HILO_R:
+            return r_type(row.opcode, 0, 0, register(ops[0], line), 0, row.funct)
         if mnemonic in PAIR_R:
-            return r_type(0, register(ops[0], line), register(ops[1], line), 0, 0, row.funct)
+            return r_type(
+                row.opcode, register(ops[0], line), register(ops[1], line), 0, 0, row.funct
+            )
         if mnemonic in SHIFTS:
             shamt = parse_integer(ops[2])
             if not 0 <= shamt <= 31:
                 raise ValueError(f"shift amount {shamt} must be between 0 and 31")
             return r_type(
-                0,
+                row.opcode,
                 0,
                 register(ops[1], line),
                 register(ops[0], line),
@@ -98,7 +103,7 @@ def encode(mnemonic: str, operands: str, address: int, program: Program, line: i
             )
         if mnemonic in THREE_R:
             return r_type(
-                0,
+                row.opcode,
                 register(ops[1], line),
                 register(ops[2], line),
                 register(ops[0], line),
